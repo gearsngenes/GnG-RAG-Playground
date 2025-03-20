@@ -1,0 +1,8 @@
+# Ignore JetBrains IDE settings (like PyCharm)
+.idea/
+
+# Ignore environment files
+.env
+
+# Ignore all YAML files
+*.yml
