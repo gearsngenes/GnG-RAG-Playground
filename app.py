@@ -81,6 +81,7 @@ def delete_index():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+#===Document Management===
 @app.route('/list_uploaded_files', methods=['POST'])
 def list_uploaded_files():
     data = request.get_json()

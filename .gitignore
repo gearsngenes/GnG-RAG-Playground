@@ -1,5 +1,6 @@
-# Ignore JetBrains IDE settings (like PyCharm)
+# Folders
 .idea/
+__pycache__/
 
 # Ignore environment files
 .env
