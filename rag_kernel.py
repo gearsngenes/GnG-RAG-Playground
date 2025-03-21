@@ -8,14 +8,48 @@ from semantic_kernel.kernel import Kernel
 from semantic_kernel.planners.sequential_planner import SequentialPlanner
 from semantic_kernel.core_plugins.text_plugin import TextPlugin
 from semantic_kernel.functions.kernel_function_decorator import kernel_function
+from semantic_kernel.contents.chat_history import ChatHistory
+from semantic_kernel.contents import ChatMessageContent
+from semantic_kernel.contents.utils.author_role import AuthorRole
 import os
-from helpers import OPENAI_API_KEY, client, encode_image
+from helpers import OPENAI_API_KEY, client as turbo_client, encode_image
 from pinecone_utils import vector_store_manager
 
-turbo_client = client
+# === Initialize Kernel & Planner Globally ===
+"""
+The kernel acts as the central hub of various services, planners, and
+plugins, which can then be invoked or used at various times.
+"""
+kernel = Kernel()
+service_id = "chat"
+ai_model_id = "gpt-4o"
+ai_service = OpenAIChatCompletion(service_id=service_id, api_key=OPENAI_API_KEY, ai_model_id=ai_model_id)
+kernel.add_service(ai_service)
 
+# === Initialize the Planner ===
+"""
+Planners are what we can use to intelligently construct sequences of method calls
+based on a user's goal. Right now, we're using a sequential planner, but others
+exist. This will be how we handle sending our query through a sequence of methods
+without explicitly defining what that sequence is.
+"""
+planner = SequentialPlanner(kernel, service_id=service_id)
+settings = kernel.get_prompt_execution_settings_from_service_id(service_id=service_id)
+settings.function_choice_behavior = FunctionChoiceBehavior.Auto(filters={"included_plugins": ["query"]})
+
+# === Initialize Chat History ===
+chat_history = ChatHistory()
+chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content="Hello"))
+chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content="Hi there!"))
+
+# === Define Custom Plugin Classes ===
 class QueryPlugin:
-    """Plugin for handling query-related functions."""
+    """
+    This plugin focuses on taking in user queries and using text & images
+    to provide relevant answers. It focuses currently only on handling
+    text-to-text responses, though it can use images internally for more
+    context to answer.
+    """
 
     @kernel_function(name="fetch_topic_descriptions",
                      description="Retrieve relevant topics and descriptions from Pinecone")
@@ -112,9 +146,8 @@ class QueryPlugin:
             query: Annotated[str, "The user query"],
             retrieved_data: Annotated[str, "Stringified dictionary containing relevant text_chunks and image_paths"]
     ) -> Annotated[str, "Final answer to the user query"]:
-
-        # print(f"DEBUG: Retrieved data for answering query: {retrieved_data}")
-
+        # Initialize general knowledge prompts in case no
+        # relevant topics are available to answer the query
         general_knowledge_request = "No relevant context found"
         prompt = f"Answer the following question using your general knowledge:\n\nQuery: {query}"
         settings = kernel.get_prompt_execution_settings_from_service_id(service_id="chat")
@@ -125,13 +158,14 @@ class QueryPlugin:
                 prompt=prompt,
                 settings=settings,
             )
-            # print(f"DEBUG: LLM Response: {response}")
             return response
         else:
+            # Parse the dictionary from the previous method
             retrieved_dict = ast.literal_eval(retrieved_data)
             text_chunks = retrieved_dict.get("text_chunks", [])
             image_paths = retrieved_dict.get("image_paths", [])
 
+            # Locate and encode images to feed into GPT-4-Turbo
             encoded_images = []
             for img_path in image_paths:
                 if os.path.exists(img_path):
@@ -140,9 +174,10 @@ class QueryPlugin:
                         encoded_images.append(
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_img}"}}
                         )
-
+            # Build the prompt to answer the query & use
+            # relevant information
             formatted_context = "\n\n".join(text_chunks)
-            text_only_prompt =f"""
+            text_only_prompt = f"""
             Use the following retrieved information as context to intelligently
             answer the user's query. If the user asks for a source, please list
             the file path or image name associated with it.
@@ -152,6 +187,8 @@ class QueryPlugin:
             
             User Query: {query}
             """
+            # If there are encoded images, use the OpenAI api.
+            # Otherwise, use Semantic Kernel
             if encoded_images:
                 prompt = text_only_prompt + "\n\n Please also use the retrieved visual images to aid in answering the query."
                 messages = [
@@ -173,8 +210,8 @@ class QueryPlugin:
                     prompt=prompt,
                     settings=settings,
                 )
-            #print(f"DEBUG: LLM Response: {response}")
             return response
+
     @kernel_function(name="format_response",
                      description="Takes the chatbot response and formats its text to be proper markdown format, which includes converting any latex/mathematical expressions into proper markdown math expressions.")
     async def format_response(
@@ -204,15 +241,7 @@ class QueryPlugin:
         )
         return response
 
-# === Initialize Kernel & Planner Globally ===
-kernel = Kernel()
-service_id = "chat"
-
-ai_model_id = "gpt-4o"
-ai_service = OpenAIChatCompletion(service_id=service_id, api_key=OPENAI_API_KEY, ai_model_id=ai_model_id)
-kernel.add_service(ai_service)
-
-# Attach plugins
+# === Add Plugins to the Kernel ===
 kernel.add_plugin(QueryPlugin(), plugin_name="query",
                   description="""
                   For question-answering related functions 
@@ -224,19 +253,8 @@ kernel.add_plugin(QueryPlugin(), plugin_name="query",
                   )
 kernel.add_plugin(TextPlugin(), plugin_name="text")
 
-from semantic_kernel.contents.chat_history import ChatHistory
-from semantic_kernel.contents import ChatMessageContent
-from semantic_kernel.contents.utils.author_role import AuthorRole
 
-chat_history = ChatHistory()
-chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content="Hello"))
-chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content="Hi there!"))
-
-# Initialize the planner
-planner = SequentialPlanner(kernel, service_id=service_id)
-settings = kernel.get_prompt_execution_settings_from_service_id(service_id=service_id)
-settings.function_choice_behavior = FunctionChoiceBehavior.Auto(filters={"included_plugins": ["query"]})
-
+# === Query-Answering Pipeline Methods ===
 async def run_query_pipeline(user_query: str):
     """Runs the query pipeline while keeping track of previous messages using SK memory."""
     # 🟢 Convert chat history to formatted prompt
@@ -254,6 +272,7 @@ async def run_query_pipeline(user_query: str):
     """
     # 🟢 Append the user query to chat history
     chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=user_query))
+
     # 🟢 Create and run planner with memory-aware prompt
     goal_prompt = f"""
     Ingest the prior conversation and the current user query,
@@ -273,6 +292,7 @@ async def run_query_pipeline(user_query: str):
     return execution_result.value
 
 def run_query(user_query: str):
+    """Wrapper method for inputting a user's question to the chatbot"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     response = loop.run_until_complete(run_query_pipeline(user_query))
@@ -282,8 +302,12 @@ def clear_sk_memory():
     """Clears the stored conversation history in SK's built-in text memory."""
     chat_history.clear()
 
-
+"""
+For running the method locally to test out semantic kernel
+responses locally. Must already have data in your pinecone
+database to use the below lines correctly.
+"""
 # if __name__ == "__main__":
 #      user_query = input("User query: ")
-#      asyncio.run(run_query_pipeline(user_query))
+#      print(asyncio.run(run_query_pipeline(user_query)))
 #      clear_sk_memory()

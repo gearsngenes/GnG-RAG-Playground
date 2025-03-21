@@ -25,6 +25,30 @@ def manage_topics():
     return render_template('manage_topics.html')
 
 #===Topic-Management====
+"""
+The following methods are used for tracking, creating, &
+removing pinecone indexes on Pinecone. These methods include
+
+-   list_indexes()
+        List existing indexes or "topics" for
+        dropdown lists on the frontend.
+        
+-   get_index_description() & update_index_description()
+        retrieve the general description for a
+        given index, allowing for it to be
+        edited and saved if changes are needed.
+        
+-   create_index()
+        For creating new pinecone indices for a topic.
+        Its description is saved in a Table of Contents
+        index, separate from the other indexes, while a
+        whole index with that name is created separately.
+        
+-   delete_index()
+        For deleting an index on pinecone and removing
+        its description from the Table of Contents
+        index, ensuring total consistency
+"""
 @app.route('/list_indexes', methods=['GET'])
 def list_indexes():
     indexes = vector_store_manager.list_indexes()
@@ -82,6 +106,42 @@ def delete_index():
         return jsonify({"error": str(e)}), 500
 
 #===Document Management===
+"""
+The following methods are used for managing individual
+& multiple files that have been uploaded locally for
+a particular topic:
+
+-   list_uploaded_files()
+        This lists all files that have been uploaded
+        for a specific topic.
+        
+-   upload_document()
+        This method takes in a file from the frontend
+        and saves it locally within a directory with
+        the file's name as a subdirectory of the
+        topic it was submitted under. Additionally,
+        pdf's, docx's, and pptx's get an images/
+        subfolder where any images in a document
+        are extracted
+        
+-   embed_files()
+        This method extracts the text of selected
+        documents, and breaks them into chunks. Each
+        chunk is then embedded as a vector onto
+        the corresponding pinecone index. For images,
+        we first create a description using the
+        GPT-4-Turbo model, we can then embedd like
+        other text chunks. Appropriate metadata
+        is stored so that we can retrieve the text,
+        source file, or image, as well.
+
+-   delete_files()
+        This method deletes vectors from selected
+        files on the local directory, as well as
+        any vectors they were embedded in on
+        Pinecone. This ensures that we cannot
+        use them for context, going forward.
+"""
 @app.route('/list_uploaded_files', methods=['POST'])
 def list_uploaded_files():
     data = request.get_json()
@@ -199,6 +259,11 @@ def delete_files():
     return jsonify({"message": f"Selected files and associated data have been deleted from '{index_name}'."})
 
 #===Conversation Methods===
+"""
+For getting questions from the frontend, generating
+responses to the questions using semantic kernel,
+and clearing the chat history when we are finished.
+"""
 @app.route('/query', methods=['POST'])
 def query():
     data = request.json
@@ -213,5 +278,7 @@ def clear_chat():
     clear_sk_memory()
     return jsonify({"message": "Chat history cleared."})
 
+
+# === To start the application ===
 if __name__ == '__main__':
     app.run("0.0.0.0", debug=True)
