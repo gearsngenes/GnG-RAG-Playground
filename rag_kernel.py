@@ -1,3 +1,4 @@
+# === Base imports ===
 import asyncio
 from typing import Annotated
 import ast
@@ -12,6 +13,8 @@ from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 import os
+
+# === Custom module imports ===
 from helpers import OPENAI_API_KEY, client as turbo_client, encode_image
 from pinecone_utils import vector_store_manager
 
@@ -35,12 +38,12 @@ without explicitly defining what that sequence is.
 """
 planner = SequentialPlanner(kernel, service_id=service_id)
 settings = kernel.get_prompt_execution_settings_from_service_id(service_id=service_id)
-settings.function_choice_behavior = FunctionChoiceBehavior.Auto(filters={"included_plugins": ["query"]})
+settings.function_choice_behavior = FunctionChoiceBehavior.Auto(filters={"included_plugins": ["QueryResponse"]})
 
 # === Initialize Chat History ===
 chat_history = ChatHistory()
-chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content="Hello"))
-chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content="Hi there!"))
+#chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content="Hello"))
+#chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content="Hi there!"))
 
 # === Define Custom Plugin Classes ===
 class QueryPlugin:
@@ -81,7 +84,7 @@ class QueryPlugin:
         settings = kernel.get_prompt_execution_settings_from_service_id(service_id="chat")
         response = await kernel.invoke_prompt(
             function_name="determine_relevant_topics",
-            plugin_name="query",
+            plugin_name="QueryResponse",
             prompt=prompt,
             settings=settings,
         )
@@ -118,7 +121,6 @@ class QueryPlugin:
         image_paths = []
 
         existing_indexes = vector_store_manager.list_indexes()  # Ensure only existing indexes are queried
-
         for topic in found_list:
             if topic not in existing_indexes:
                 continue  # Skip missing index
@@ -154,7 +156,7 @@ class QueryPlugin:
         if retrieved_data == general_knowledge_request:
             response = await kernel.invoke_prompt(
                 function_name="answer_query",
-                plugin_name="query",
+                plugin_name="QueryResponse",
                 prompt=prompt,
                 settings=settings,
             )
@@ -185,7 +187,7 @@ class QueryPlugin:
             Retrieved information:
             {formatted_context}
             
-            User Query: {query}
+            Full conversation & User Query: {query}
             """
             # If there are encoded images, use the OpenAI api.
             # Otherwise, use Semantic Kernel
@@ -206,7 +208,7 @@ class QueryPlugin:
                 prompt = text_only_prompt
                 response = await kernel.invoke_prompt(
                     function_name="answer_query",
-                    plugin_name="query",
+                    plugin_name="QueryResponse",
                     prompt=prompt,
                     settings=settings,
                 )
@@ -235,14 +237,14 @@ class QueryPlugin:
         """
         response = await kernel.invoke_prompt(
             function_name="format_response",
-            plugin_name="query",
+            plugin_name="QueryResponse",
             prompt=prompt,
             settings=settings,
         )
         return response
 
 # === Add Plugins to the Kernel ===
-kernel.add_plugin(QueryPlugin(), plugin_name="query",
+kernel.add_plugin(QueryPlugin(), plugin_name="QueryResponse",
                   description="""
                   For question-answering related functions 
                   for identifying and selecting relevant 
@@ -270,9 +272,7 @@ async def run_query_pipeline(user_query: str):
     
     User Query: {user_query}
     """
-    # 🟢 Append the user query to chat history
     chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=user_query))
-
     # 🟢 Create and run planner with memory-aware prompt
     goal_prompt = f"""
     Ingest the prior conversation and the current user query,
@@ -285,8 +285,7 @@ async def run_query_pipeline(user_query: str):
     """
     plan = await planner.create_plan(goal_prompt)
     execution_result = await plan.invoke(kernel, {"query": full_prompt})
-
-    # 🟢 Store the assistant's response in SK's memory
+    # 🟢 Store the user's query and assistant's response in SK's memory
     chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content=execution_result.value))
     # print(execution_result.value)
     return execution_result.value
@@ -301,6 +300,14 @@ def run_query(user_query: str):
 def clear_sk_memory():
     """Clears the stored conversation history in SK's built-in text memory."""
     chat_history.clear()
+
+def get_chat_history():
+    """Returns the chat history as a list of dictionaries with role and content."""
+    return [
+        {"role": msg.role.value, "content": msg.content}
+        for msg in chat_history.messages
+    ]
+
 
 """
 For running the method locally to test out semantic kernel

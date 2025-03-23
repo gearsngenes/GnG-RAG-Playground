@@ -53,6 +53,7 @@
 
 <div style="margin-top: 10px;">
     <button onclick="embedSelectedFiles()">Embed Selected</button>
+    <button onclick="unembedSelectedFiles()">Unembed Selected</button>
     <button onclick="deleteSelectedFiles()">Delete Selected</button>
 </div>
 
@@ -114,12 +115,15 @@
             success: function(data) {
                 let fileList = $('#file-list').empty();
                 if (data.files.length > 0) {
-                    data.files.forEach(file => fileList.append(`
-                        <li>
-                            <input type="checkbox" value="${file}">
-                            ${file}
-                        </li>
-                    `));
+                    data.files.forEach(file => {
+                        let statusText = file.embedded ? "Embedded" : "Not Embedded";
+                        fileList.append(`
+                            <li>
+                                <input type="checkbox" value="${file.name}">
+                                ${file.name} <span style="color: ${file.embedded ? 'green' : 'red'};">(${statusText})</span>
+                            </li>
+                        `);
+                    });
                 } else {
                     fileList.append("<li>No files uploaded.</li>");
                 }
@@ -129,6 +133,38 @@
             }
         });
     }
+
+    function unembedSelectedFiles() {
+        let indexName = $('#existing-index-select').val();
+        if (!indexName) {
+            alert("Please select a topic first.");
+            return;
+        }
+
+        let selectedFiles = $('#file-list input[type="checkbox"]:checked')
+            .map((_, checkbox) => checkbox.value)
+            .get();
+
+        if (selectedFiles.length === 0) {
+            alert("Please select at least one file to unembed.");
+            return;
+        }
+
+        $.ajax({
+            url: '/unembed_files',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ index_name: indexName, files: selectedFiles }),
+            success: function(response) {
+                alert(response.message);
+                listUploadedFiles();  // Refresh embedding status
+            },
+            error: function(xhr) {
+                alert("Error unembedding files: " + xhr.responseText);
+            }
+        });
+    }
+
 
     function deleteSelectedFiles() {
         let indexName = $('#existing-index-select').val();
@@ -157,7 +193,6 @@
             }
         });
     }
-
     function embedSelectedFiles() {
         let indexName = $('#existing-index-select').val();
         let chunkSize = $('#chunk-size').val();
@@ -182,12 +217,15 @@
             data: JSON.stringify({ index_name: indexName, files: selectedFiles, chunk_size: chunkSize }),
             success: function(response) {
                 alert(response.message);
+                // 🔄 Refresh the file list to update embedding status
+                listUploadedFiles(indexName);
             },
             error: function(xhr) {
                 alert("Error embedding files: " + xhr.responseText);
             }
         });
     }
+
 
     function createTopic() {
         let indexName = $('#new-index-name').val();

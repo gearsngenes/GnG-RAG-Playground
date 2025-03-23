@@ -98,6 +98,25 @@ class PineconeManager:
         if chunk_ids:
             index.delete(ids=chunk_ids, namespace="docs")
 
+    def is_embedded(self, index_name, file_name, namespace="docs"):
+        """
+        Searches all non-table-of-contents indexes for the given file name.
+        Returns the index name where the file is embedded, or None if not found.
+        """
+        index = self.pc.Index(index_name)
+        try:
+            query_result = index.query(
+                vector=[0] * 1536,
+                namespace=namespace,
+                top_k=1,
+                filter={"source": {"$eq": file_name}},
+                include_metadata=True
+            )
+            return True if query_result.get("matches") else False
+        except Exception as e:
+            print(f"Error checking embedding status of {file_name} in {index_name}")
+            return False
+
     def upsert_vectors(self, index_name, src_doc, file_paths, chunks, embed_type, namespace="docs"):
         pc_vectors = [
             {

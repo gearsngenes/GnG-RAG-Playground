@@ -82,7 +82,7 @@
 </head>
 <body>
 
-<h2>Gears N' Genes RAG Playground (v1.8)</h2>
+<h2>Gears N' Genes RAG Playground (v1.8.5)</h2>
 <button onclick="window.location.href='/manage_topics'">Manage Topics</button>
 
 <h3>Chat</h3>
@@ -114,7 +114,6 @@
                 let botMessage = `<div class='message bot'><div class="markdown-body">${formattedResponse}</div></div>`;
                 $('#chat-box').append(botMessage);
 
-                // Re-render MathJax for equations
                 MathJax.typesetPromise().then(() => {
                     scrollToBottom();
                 });
@@ -137,7 +136,6 @@
     }
 
     function formatMessage(text) {
-        // Parse markdown safely
         return marked.parse(text);
     }
 
@@ -147,6 +145,31 @@
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
     }
+
+    function loadChatHistory() {
+        $.get('/load_conversation', function(response) {
+            const history = response.chat_history || [];
+            $('#chat-box').empty();
+            history.forEach(msg => {
+                let roleClass = msg.role === 'user' ? 'user' : 'bot';
+                let content = msg.role === 'user' ? escapeHtml(msg.content) : formatMessage(msg.content);
+                let htmlContent = msg.role === 'user'
+                    ? `<div class='message ${roleClass}'>User: ${content}</div>`
+                    : `<div class='message ${roleClass}'><div class="markdown-body">${content}</div></div>`;
+                $('#chat-box').append(htmlContent);
+            });
+
+            MathJax.typesetPromise().then(() => {
+                scrollToBottom();
+            });
+        }).fail(function(xhr) {
+            console.error("Failed to load chat history:", xhr.responseJSON?.error || xhr.statusText);
+        });
+    }
+
+    $(document).ready(function() {
+        loadChatHistory();
+    });
 </script>
 
 </body>

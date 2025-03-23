@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template
 from pinecone_utils import vector_store_manager
-from rag_kernel import run_query, clear_sk_memory
+from rag_kernel import run_query, clear_sk_memory, get_chat_history
 import os
 import shutil
 from helpers import (UPLOAD_FOLDER,
@@ -144,6 +144,7 @@ a particular topic:
 """
 @app.route('/list_uploaded_files', methods=['POST'])
 def list_uploaded_files():
+    """Lists the names of uploaded files for a given topic/index with their embedding status."""
     data = request.get_json()
     index_name = data.get("index_name")
     if not index_name:
@@ -151,8 +152,15 @@ def list_uploaded_files():
     folder_path = os.path.join(UPLOAD_FOLDER, index_name)
     if not os.path.exists(folder_path):
         return jsonify({"files": []})
+
     files = os.listdir(folder_path)
-    return jsonify({"files": files})
+    file_info = []
+
+    for file_name in files:
+        embedded = vector_store_manager.is_embedded(index_name, file_name)
+        file_info.append({"name": file_name, "embedded": embedded})
+
+    return jsonify({"files": file_info})
 
 @app.route('/upload_document', methods=['POST'])
 def upload_document():
@@ -242,6 +250,22 @@ def embed_files():
         "message": f"Embedding complete: {total_text_vectors} text chunks and {total_image_vectors} images processed."
     })
 
+@app.route('/unembed_files', methods=['POST'])
+def unembed_files():
+    data = request.json
+    index_name = data.get("index_name")
+    files_to_unembed = list(data.get("files", []))
+    if not index_name or not files_to_unembed:
+        return jsonify({"error": "Index name and files to unembed are required."}), 400
+
+    for file_name in files_to_unembed:
+        try:
+            vector_store_manager.delete_vectors_by_source(index_name, file_name)
+        except Exception as e:
+            return jsonify({"error": f"Failed to unembed '{file_name}': {str(e)}"}), 500
+
+    return jsonify({"message": f"Vectors for selected files have been removed from '{index_name}'."})
+
 @app.route('/delete_files', methods=['POST'])
 def delete_files():
     data = request.json
@@ -272,6 +296,11 @@ def query():
         return jsonify({"error": "Query text is required."}), 400
     response = run_query(query_text)
     return jsonify({"response": str(response)})
+
+@app.route('/load_conversation', methods=['GET'])
+def get_chat_history_api():
+    history = get_chat_history()
+    return jsonify({"chat_history": history})
 
 @app.route('/clear_chat', methods=['POST'])
 def clear_chat():
