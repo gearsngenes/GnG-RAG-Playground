@@ -68,9 +68,12 @@ class QueryPlugin:
             self,
             kernel: Kernel,
             query: Annotated[str, "The user query"],
+            topics: Annotated[str, "A stringified list of topics that was supplied by the user directly. This can either be empty, signaling us to choose the topics most related to the query ourselves, or it could contain a preselected list of topics to use."],
             topics_descriptions: Annotated[str, "A stringified dictionary of topics and descriptions"]
     ) -> Annotated[str, "Stringified list of most relevant topic names, or 'general' if none are applicable"]:
-
+        topics = ast.literal_eval(topics)
+        if len(topics):
+            return str(topics)
         topics_dict = ast.literal_eval(topics_descriptions)
         prompt = f"""
         Given the following topics and their descriptions: {topics_dict},
@@ -182,17 +185,20 @@ class QueryPlugin:
             text_only_prompt = f"""
             Use the following retrieved information as context to intelligently
             answer the user's query. If the user asks for a source, please list
-            the file path or image name associated with it.
+            the file path or image name associated with it. Be sure to ONLY use
+            information that you can find from the retrieved chunks below to
+            answer the query. Do NOT use your general knowledge base.
             
             Retrieved information:
             {formatted_context}
             
-            Full conversation & User Query: {query}
+            Full conversation & User Query to answer:
+            {query}
             """
             # If there are encoded images, use the OpenAI api.
             # Otherwise, use Semantic Kernel
             if encoded_images:
-                prompt = text_only_prompt + "\n\n Please also use the retrieved visual images to aid in answering the query."
+                prompt = text_only_prompt + "\n\n Please also use any retrieved images to aid in answering the query."
                 messages = [
                     {
                         "role": "user",
@@ -257,7 +263,7 @@ kernel.add_plugin(TextPlugin(), plugin_name="text")
 
 
 # === Query-Answering Pipeline Methods ===
-async def run_query_pipeline(user_query: str):
+async def run_query_pipeline(user_query: str, topics: list[str]):
     """Runs the query pipeline while keeping track of previous messages using SK memory."""
     # 🟢 Convert chat history to formatted prompt
     history_text = "\n".join(
@@ -276,25 +282,28 @@ async def run_query_pipeline(user_query: str):
     # 🟢 Create and run planner with memory-aware prompt
     goal_prompt = f"""
     Ingest the prior conversation and the current user query,
-    then find the list of topics it could be related to,
-    identify the most relevant topics to the user's query
-    (including text and potentially images), and finally answer
-    the said query using the retrieved information as context.
-    Then make sure the final response is in proper markdown
-    format and cleaned up for display.
+    then find the list of topics it could be related to -if
+    a list of topics haven't been provided by the user-,
+    identify information from those topics that is most
+    relevant to the user's query (including text and
+    potentially images), and finally answer the said query
+    using the retrieved information as context. Then make sure
+    the final response is in proper markdown format and
+    cleaned up for display.
     """
     plan = await planner.create_plan(goal_prompt)
-    execution_result = await plan.invoke(kernel, {"query": full_prompt})
+    execution_result = await plan.invoke(kernel, {"query": full_prompt, "topics": str(topics)})
     # 🟢 Store the user's query and assistant's response in SK's memory
     chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content=execution_result.value))
     # print(execution_result.value)
     return execution_result.value
 
-def run_query(user_query: str):
+def run_query(user_query: str, topics: list[str]):
     """Wrapper method for inputting a user's question to the chatbot"""
+    #print("My topics used: ", topics)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    response = loop.run_until_complete(run_query_pipeline(user_query))
+    response = loop.run_until_complete(run_query_pipeline(user_query, topics))
     return response
 
 def clear_sk_memory():

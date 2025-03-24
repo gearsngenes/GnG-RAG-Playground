@@ -82,8 +82,17 @@
 </head>
 <body>
 
-<h2>Gears N' Genes RAG Playground (v1.8.5)</h2>
+<h2>Gears N' Genes RAG Playground (v1.9)</h2>
 <button onclick="window.location.href='/manage_topics'">Manage Topics</button>
+
+<h3>SME Selection</h3>
+<label><input type="radio" name="sme-selection" value="ai" checked> AI-Selected SME</label>
+<label><input type="radio" name="sme-selection" value="human"> Human-Selected SME</label>
+
+<div id="topic-selection" style="display: none; margin-top: 10px;">
+    <p>Select Topics (at least one):</p>
+    <div id="topics-list"></div>
+</div>
 
 <h3>Chat</h3>
 <div id="chat-box"></div>
@@ -95,10 +104,20 @@
 <script>
     function sendQuery() {
         let query = $('#query-input').val().trim();
-
         if (!query) {
             alert("Please enter a question.");
             return;
+        }
+
+        let smeMode = $('input[name="sme-selection"]:checked').val();
+        let selectedTopics = [];
+
+        if (smeMode === 'human') {
+            selectedTopics = $('input[name="topics"]:checked').map((_, el) => el.value).get();
+            if (selectedTopics.length === 0) {
+                alert("Please select at least one topic for Human-Selected SME.");
+                return;
+            }
         }
 
         $('#chat-box').append(`<div class='message user'>User: ${escapeHtml(query)}</div>`);
@@ -108,21 +127,19 @@
             url: '/query',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ query: query }),
+            data: JSON.stringify({ query: query, topics: selectedTopics }),
             success: function(response) {
                 let formattedResponse = formatMessage(response.response);
                 let botMessage = `<div class='message bot'><div class="markdown-body">${formattedResponse}</div></div>`;
                 $('#chat-box').append(botMessage);
-
-                MathJax.typesetPromise().then(() => {
-                    scrollToBottom();
-                });
+                MathJax.typesetPromise().then(scrollToBottom);
             },
             error: function(xhr) {
                 alert("Error: " + (xhr.responseJSON?.error || "An error occurred."));
             }
         });
     }
+
 
     function clearChat() {
         $.post('/clear_chat', function(response) {
@@ -169,6 +186,26 @@
 
     $(document).ready(function() {
         loadChatHistory();
+    });
+    function loadTopicsList() {
+        $.get('/list_indexes', function(data) {
+            let filtered = data.filter(index => index !== 'table_of_contents');
+            let topicsDiv = $('#topics-list').empty();
+            filtered.forEach(topic => {
+                topicsDiv.append(`
+                    <label><input type="checkbox" name="topics" value="${topic}"> ${topic}</label><br>
+                `);
+            });
+        }).fail(() => alert("Failed to load topics."));
+    }
+
+    $('input[name="sme-selection"]').change(function() {
+        if ($(this).val() === 'human') {
+            $('#topic-selection').show();
+            loadTopicsList();
+        } else {
+            $('#topic-selection').hide();
+        }
     });
 </script>
 

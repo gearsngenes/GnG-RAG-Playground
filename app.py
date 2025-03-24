@@ -3,6 +3,7 @@ from pinecone_utils import vector_store_manager
 from rag_kernel import run_query, clear_sk_memory, get_chat_history
 import os
 import shutil
+import json
 from helpers import (UPLOAD_FOLDER,
                      DOC_EXTENSIONS,
                      IMG_EXTENSIONS,
@@ -188,9 +189,9 @@ def upload_document():
             if ext.endswith(".pdf"):
                 images_saved = extract_images_from_pdf(file_path, document_image_dir)
             elif ext.endswith(".docx"):
-                images_saved = extract_images_from_docx(file_path, document_image_dir)
+                images_saved = extract_images_from_docx(document_dir, file_path, document_image_dir)
             elif ext.endswith(".pptx"):
-                images_saved = extract_images_from_pptx(file_path, document_image_dir)
+                images_saved = extract_images_from_pptx(document_dir, file_path, document_image_dir)
     else:
         images_saved = [file_path]
     return jsonify({
@@ -231,12 +232,25 @@ def embed_files():
                 continue
             images_dir = os.path.join(file_dir, "images")
             if os.path.exists(images_dir):
-                for image_file in os.listdir(images_dir):
-                    image_path = os.path.join(images_dir, image_file)
-                    if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        description = generate_gpt4_description(image_path)
-                        image_descriptions.append(description)
-                        image_paths.append(image_path)
+                # Check for alt-text map if it's a DOCX or PPTX
+                alt_map_path = os.path.join(file_dir, "alt_image_map.json")
+                if ext in [".pptx", ".docx"] and os.path.exists(alt_map_path):
+                    with open(alt_map_path, "r", encoding="utf-8") as f:
+                        alt_images_info = json.load(f)
+                    for entry in alt_images_info:
+                        img_path = entry["path"]
+                        alt_text = entry["alt_text"]
+                        if os.path.exists(img_path):
+                            image_paths.append(img_path)
+                            image_descriptions.append(alt_text)
+                else:
+                    # Generate descriptions for PDFs or files missing ALT text with GPT-4-Turbo
+                    for image_file in os.listdir(images_dir):
+                        image_path = os.path.join(images_dir, image_file)
+                        if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                            description = generate_gpt4_description(image_path)
+                            image_paths.append(image_path)
+                            image_descriptions.append(description)
         elif ext in IMG_EXTENSIONS:
             print("Image path: ", file_path)
             image_paths = [file_path]
@@ -292,9 +306,10 @@ and clearing the chat history when we are finished.
 def query():
     data = request.json
     query_text = data.get("query")
+    topics = list(data.get("topics", []))  # May be empty if AI-Selected SME
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
-    response = run_query(query_text)
+    response = run_query(query_text, topics)  # Pass topics
     return jsonify({"response": str(response)})
 
 @app.route('/load_conversation', methods=['GET'])
@@ -306,7 +321,6 @@ def get_chat_history_api():
 def clear_chat():
     clear_sk_memory()
     return jsonify({"message": "Chat history cleared."})
-
 
 # === To start the application ===
 if __name__ == '__main__':

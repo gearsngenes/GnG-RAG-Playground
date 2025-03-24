@@ -5,6 +5,10 @@ import base64
 from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
+import json
+
 
 load_dotenv()
 
@@ -49,31 +53,83 @@ def extract_images_from_pdf(file_path, images_dir):
             images.append(img_path)
     return images
 
-def extract_images_from_docx(file_path, images_dir):
+def extract_images_from_docx(document_dir, file_path, images_dir):
     doc = Document(file_path)
+    os.makedirs(images_dir, exist_ok=True)
     images = []
-    for img_index, rel in enumerate(doc.part.rels):
-        if "image" in doc.part.rels[rel].target_ref:
-            img_data = doc.part.rels[rel].target_part.blob
-            img_filename = f"image-{img_index}.jpg"
+    alt_text_map = []
+
+    for i, shape in enumerate(doc.inline_shapes):
+        alt_text = shape._inline.docPr.get("descr")
+        if alt_text:
+            rel_id = shape._inline.graphic.graphicData.pic.blipFill.blip.embed
+            image_part = doc.part.related_parts[rel_id]
+            image_bytes = image_part.blob
+
+            img_filename = f"image-{i}.jpg"
             img_path = os.path.join(images_dir, img_filename)
+
             with open(img_path, "wb") as f:
-                f.write(img_data)
+                f.write(image_bytes)
+
             images.append(img_path)
+            alt_text_map.append({
+                "path": img_path,
+                "alt_text": alt_text
+            })
+
+    # Save alt-text ↔ image path mappings
+    if alt_text_map:
+        map_file_path = os.path.join(document_dir, "alt_image_map.json")
+        with open(map_file_path, "w", encoding="utf-8") as f:
+            json.dump(alt_text_map, f, indent=4)
     return images
 
-def extract_images_from_pptx(file_path, images_dir):
+def extract_images_from_pptx(document_dir, file_path, images_dir):
     prs = Presentation(file_path)
+    os.makedirs(images_dir, exist_ok=True)
     images = []
-    for slide_index, slide in enumerate(prs.slides):
-        for img_index, shape in enumerate(slide.shapes):
-            if hasattr(shape, "image"):
-                img_data = shape.image.blob
-                img_filename = f"slide-{slide_index}-{img_index}.jpg"
-                img_path = os.path.join(images_dir, img_filename)
-                with open(img_path, "wb") as f:
-                    f.write(img_data)
-                images.append(img_path)
+    alt_text_map = []
+    image_count = 0  # Counter for saved images
+    for slide_num, slide in enumerate(prs.slides, start=1):
+        for shape_num, shape in enumerate(slide.shapes, start=1):
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                try:
+                    nvPicPr = shape._element.find(qn('p:nvPicPr'))
+                    if nvPicPr is not None:
+                        cNvPr = nvPicPr.find(qn('p:cNvPr'))
+                        if cNvPr is not None:
+                            alt_text = cNvPr.get('descr')
+                            if alt_text:
+                                # Extract image bytes
+                                image = shape.image
+                                image_bytes = image.blob
+                                image_ext = image.ext  # e.g., 'jpeg', 'png'
+
+                                img_filename = f"image-{image_count}.{image_ext}"
+                                img_path = os.path.join(images_dir, img_filename)
+
+                                with open(img_path, "wb") as f:
+                                    f.write(image_bytes)
+
+                                images.append(img_path)
+                                alt_text_map.append({
+                                    "path": img_path,
+                                    "alt_text": alt_text
+                                })
+
+                                image_count += 1  # Increment for next image
+
+                except Exception as e:
+                    # Optional debug print
+                    # print(f"Error processing slide {slide_num}, shape {shape_num}: {e}")
+                    pass
+    # Save alt-text ↔ image path mappings
+    if alt_text_map:
+        map_file_path = os.path.join(document_dir, "alt_image_map.json")
+        with open(map_file_path, "w", encoding="utf-8") as f:
+            json.dump(alt_text_map, f, indent=4)
+
     return images
 
 #===RAG Helper Methods===
