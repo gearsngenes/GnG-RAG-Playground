@@ -21,68 +21,14 @@
             svg: { fontCache: 'global' }
         };
     </script>
-
-    <!-- MathJax Library -->
     <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
 
-    <!-- Optional GitHub-style Markdown CSS (Minimal Styling) -->
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        #chat-box {
-            width: 100%;
-            height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ccc;
-            padding: 10px;
-            background-color: #f9f9f9;
-            display: flex;
-            flex-direction: column;
-        }
-        .message {
-            margin: 5px 0;
-            padding: 8px;
-            border-radius: 5px;
-            max-width: 80%;
-        }
-        .user {
-            background-color: #d0e2ff;
-            align-self: flex-end;
-            text-align: right;
-            color: blue;
-        }
-        .bot {
-            background-color: #d4edda;
-            align-self: flex-start;
-            text-align: left;
-            color: green;
-        }
-        /* Markdown Styling */
-        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-            margin: 0.5em 0;
-        }
-        .markdown-body p {
-            margin: 0.5em 0;
-        }
-        .markdown-body pre {
-            background: #eee;
-            padding: 5px;
-            border-radius: 4px;
-            overflow-x: auto;
-        }
-        .markdown-body code {
-            background: #f4f4f4;
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-    </style>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 </head>
 <body>
 
-<h2>Gears N' Genes RAG Playground (v1.9)</h2>
+<h2>Gears N' Genes RAG Playground (v1.9.5)</h2>
 <button onclick="window.location.href='/manage_topics'">Manage Topics</button>
 
 <h3>SME Selection</h3>
@@ -101,113 +47,7 @@
 <button onclick="sendQuery()">Send</button>
 <button onclick="clearChat()">Clear Chat</button>
 
-<script>
-    function sendQuery() {
-        let query = $('#query-input').val().trim();
-        if (!query) {
-            alert("Please enter a question.");
-            return;
-        }
-
-        let smeMode = $('input[name="sme-selection"]:checked').val();
-        let selectedTopics = [];
-
-        if (smeMode === 'human') {
-            selectedTopics = $('input[name="topics"]:checked').map((_, el) => el.value).get();
-            if (selectedTopics.length === 0) {
-                alert("Please select at least one topic for Human-Selected SME.");
-                return;
-            }
-        }
-
-        $('#chat-box').append(`<div class='message user'>User: ${escapeHtml(query)}</div>`);
-        $('#query-input').val('');
-
-        $.ajax({
-            url: '/query',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ query: query, topics: selectedTopics }),
-            success: function(response) {
-                let formattedResponse = formatMessage(response.response);
-                let botMessage = `<div class='message bot'><div class="markdown-body">${formattedResponse}</div></div>`;
-                $('#chat-box').append(botMessage);
-                MathJax.typesetPromise().then(scrollToBottom);
-            },
-            error: function(xhr) {
-                alert("Error: " + (xhr.responseJSON?.error || "An error occurred."));
-            }
-        });
-    }
-
-
-    function clearChat() {
-        $.post('/clear_chat', function(response) {
-            $('#chat-box').empty();
-            alert(response.message);
-        });
-    }
-
-    function scrollToBottom() {
-        $('#chat-box').scrollTop($('#chat-box')[0].scrollHeight);
-    }
-
-    function formatMessage(text) {
-        return marked.parse(text);
-    }
-
-    function escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-    }
-
-    function loadChatHistory() {
-        $.get('/load_conversation', function(response) {
-            const history = response.chat_history || [];
-            $('#chat-box').empty();
-            history.forEach(msg => {
-                let roleClass = msg.role === 'user' ? 'user' : 'bot';
-                let content = msg.role === 'user' ? escapeHtml(msg.content) : formatMessage(msg.content);
-                let htmlContent = msg.role === 'user'
-                    ? `<div class='message ${roleClass}'>User: ${content}</div>`
-                    : `<div class='message ${roleClass}'><div class="markdown-body">${content}</div></div>`;
-                $('#chat-box').append(htmlContent);
-            });
-
-            MathJax.typesetPromise().then(() => {
-                scrollToBottom();
-            });
-        }).fail(function(xhr) {
-            console.error("Failed to load chat history:", xhr.responseJSON?.error || xhr.statusText);
-        });
-    }
-
-    $(document).ready(function() {
-        loadChatHistory();
-    });
-    function loadTopicsList() {
-        $.get('/list_indexes', function(data) {
-            let filtered = data.filter(index => index !== 'table_of_contents');
-            let topicsDiv = $('#topics-list').empty();
-            filtered.forEach(topic => {
-                topicsDiv.append(`
-                    <label><input type="checkbox" name="topics" value="${topic}"> ${topic}</label><br>
-                `);
-            });
-        }).fail(() => alert("Failed to load topics."));
-    }
-
-    $('input[name="sme-selection"]').change(function() {
-        if ($(this).val() === 'human') {
-            $('#topic-selection').show();
-            loadTopicsList();
-        } else {
-            $('#topic-selection').hide();
-        }
-    });
-</script>
-
+<!-- Custom Script -->
+<script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>
 </html>
