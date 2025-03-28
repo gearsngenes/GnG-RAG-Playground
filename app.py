@@ -323,10 +323,11 @@ and clearing the chat history when we are finished.
 def query():
     data = request.json
     query_text = data.get("query")
-    topics = list(data.get("topics", []))  # May be empty if AI-Selected SME
+    topics = list(data.get("topics", []))
+    use_general_knowledge = data.get("use_general_knowledge", True)
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
-    response = run_query(query_text, topics)  # Pass topics
+    response = run_query(query_text, topics, use_general_knowledge)
     return jsonify({"response": str(response)})
 
 @app.route('/load_conversation', methods=['GET'])

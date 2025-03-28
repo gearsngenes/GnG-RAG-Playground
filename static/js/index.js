@@ -16,6 +16,8 @@ function sendQuery() {
         }
     }
 
+    let useGeneralKnowledge = $('#include-general-knowledge').is(':checked');
+
     $('#chat-box').append(`<div class='message user'>User: ${escapeHtml(query)}</div>`);
     $('#query-input').val('');
 
@@ -23,7 +25,11 @@ function sendQuery() {
         url: '/query',
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ query: query, topics: selectedTopics }),
+        data: JSON.stringify({
+            query: query,
+            topics: selectedTopics,
+            use_general_knowledge: useGeneralKnowledge
+        }),
         success: function(response) {
             let formattedResponse = marked.parse(response.response);
             $('#chat-box').append(`<div class='message bot'><div class='markdown-body'>${formattedResponse}</div></div>`);
@@ -83,9 +89,11 @@ $(document).ready(function() {
     $('input[name="sme-selection"]').change(function() {
         if ($(this).val() === 'human') {
             $('#topic-selection').show();
+            $('#general-knowledge-toggle').hide();
             loadTopicsList();
         } else {
             $('#topic-selection').hide();
+            $('#general-knowledge-toggle').show();
         }
     });
 });
