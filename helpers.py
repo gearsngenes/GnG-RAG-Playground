@@ -40,18 +40,36 @@ def extract_text(file_path, chunk_size=500):
         raise ValueError("Unsupported file format.")
     return chunk_text(full_text, chunk_size)
 
-def extract_images_from_pdf(file_path, images_dir):
+def extract_images_from_pdf(document_dir, file_path, images_dir):
     reader = PdfReader(file_path)
     images = []
+    alt_text_map = []
+
     for i, page in enumerate(reader.pages):
         for img_index, image in enumerate(page.images):
             img_data = image.data
             img_filename = f"page-{i}-{img_index}.jpg"
             img_path = os.path.join(images_dir, img_filename)
+
             with open(img_path, "wb") as f:
                 f.write(img_data)
+
             images.append(img_path)
+
+            alt_text = generate_gpt4_description(img_path)
+            alt_text_map.append({
+                "path": img_path,
+                "alt_text": alt_text
+            })
+
+    # Save alt-image map for the PDF
+    if alt_text_map:
+        map_file_path = os.path.join(document_dir, "alt_image_map.json")
+        with open(map_file_path, "w", encoding="utf-8") as f:
+            json.dump(alt_text_map, f, indent=4)
+
     return images
+
 
 def extract_images_from_docx(document_dir, file_path, images_dir):
     doc = Document(file_path)

@@ -187,7 +187,7 @@ def upload_document():
         if "txt" != file.filename.split(".")[-1]:
             ext = file_path.lower()
             if ext.endswith(".pdf"):
-                images_saved = extract_images_from_pdf(file_path, document_image_dir)
+                images_saved = extract_images_from_pdf(document_dir, file_path, document_image_dir)
             elif ext.endswith(".docx"):
                 images_saved = extract_images_from_docx(document_dir, file_path, document_image_dir)
             elif ext.endswith(".pptx"):
@@ -204,24 +204,25 @@ def embed_files():
     index_name = data.get("index_name")
     files_to_embed = list(data.get("files", []))
     chunk_size = int(data.get("chunk_size", 500))
+
     if not index_name or not files_to_embed:
         return jsonify({"error": "Index name and files are required."}), 400
 
     topic_path = os.path.join(UPLOAD_FOLDER, index_name)
     total_text_vectors = 0
     total_image_vectors = 0
-    print("files_to_embed: ", files_to_embed)
+
     for file_name in files_to_embed:
         file_dir = os.path.join(topic_path, file_name)
         file_path = os.path.join(file_dir, file_name)
-        ext = "."+ file_name.split(".")[-1]
-        print(f"File: {file_name}, Dir: {file_dir}, Path: {file_path}, Extension: {ext}")
-        # if not os.path.isfile(file_dir):
-        #     continue
-        image_descriptions = []
+        ext = "." + file_name.split(".")[-1].lower()
+
         image_paths = []
+        image_descriptions = []
+
         if ext in DOC_EXTENSIONS:
             try:
+                # Extract and embed text
                 text_chunks = extract_text(file_path, chunk_size)
                 total_text_vectors += len(text_chunks)
                 file_paths = [file_path] * len(text_chunks)
@@ -230,11 +231,11 @@ def embed_files():
             except Exception as e:
                 print(f"Error extracting text from {file_name}: {e}")
                 continue
-            images_dir = os.path.join(file_dir, "images")
-            if os.path.exists(images_dir):
-                # Check for alt-text map if it's a DOCX or PPTX
-                alt_map_path = os.path.join(file_dir, "alt_image_map.json")
-                if ext in [".pptx", ".docx"] and os.path.exists(alt_map_path):
+
+            # Look for alt_image_map.json to embed images
+            alt_map_path = os.path.join(file_dir, "alt_image_map.json")
+            if os.path.exists(alt_map_path):
+                try:
                     with open(alt_map_path, "r", encoding="utf-8") as f:
                         alt_images_info = json.load(f)
                     for entry in alt_images_info:
@@ -243,14 +244,9 @@ def embed_files():
                         if os.path.exists(img_path):
                             image_paths.append(img_path)
                             image_descriptions.append(alt_text)
-                else:
-                    # Generate descriptions for PDFs or files missing ALT text with GPT-4-Turbo
-                    for image_file in os.listdir(images_dir):
-                        image_path = os.path.join(images_dir, image_file)
-                        if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                            description = generate_gpt4_description(image_path)
-                            image_paths.append(image_path)
-                            image_descriptions.append(description)
+                except Exception as e:
+                    print(f"Error reading alt_image_map.json for {file_name}: {e}")
+
         elif ext in IMG_EXTENSIONS:
             print("Image path: ", file_path)
             image_paths = [file_path]
