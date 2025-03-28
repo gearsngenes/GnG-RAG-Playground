@@ -167,6 +167,8 @@ def list_uploaded_files():
 def upload_document():
     index_name = request.form.get('index_name')
     file = request.files.get('file')
+    user_description = request.form.get('image_description', '').strip()
+
     if not index_name:
         return jsonify({"error": "Invalid index selection."}), 400
     if not file:
@@ -175,25 +177,35 @@ def upload_document():
     topic_dir = os.path.join(UPLOAD_FOLDER, index_name)
     os.makedirs(topic_dir, exist_ok=True)
 
-    #file_base_name = os.path.splitext(file.filename)[0]
     document_dir = os.path.join(topic_dir, file.filename)
     os.makedirs(document_dir, exist_ok=True)
     file_path = os.path.join(document_dir, file.filename)
     file.save(file_path)
+
+    ext = "." + file.filename.split(".")[-1].lower()
     images_saved = []
-    if ("." + file.filename.split(".")[-1]) not in IMG_EXTENSIONS:
+
+    if ext not in IMG_EXTENSIONS:
+        # For docs (PDF/DOCX/PPTX), extract embedded images
         document_image_dir = os.path.join(document_dir, "images")
         os.makedirs(document_image_dir, exist_ok=True)
-        if "txt" != file.filename.split(".")[-1]:
-            ext = file_path.lower()
-            if ext.endswith(".pdf"):
-                images_saved = extract_images_from_pdf(document_dir, file_path, document_image_dir)
-            elif ext.endswith(".docx"):
-                images_saved = extract_images_from_docx(document_dir, file_path, document_image_dir)
-            elif ext.endswith(".pptx"):
-                images_saved = extract_images_from_pptx(document_dir, file_path, document_image_dir)
+        if ext.endswith(".pdf"):
+            images_saved = extract_images_from_pdf(document_dir, file_path, document_image_dir)
+        elif ext.endswith(".docx"):
+            images_saved = extract_images_from_docx(document_dir, file_path, document_image_dir)
+        elif ext.endswith(".pptx"):
+            images_saved = extract_images_from_pptx(document_dir, file_path, document_image_dir)
     else:
+        # For standalone images
         images_saved = [file_path]
+        if user_description:
+            alt_map_path = os.path.join(document_dir, "alt_image_map.json")
+            with open(alt_map_path, "w", encoding="utf-8") as f:
+                json.dump([{
+                    "path": file_path,
+                    "alt_text": user_description
+                }], f, indent=4)
+
     return jsonify({
         "message": f"Document '{file.filename}' and {len(images_saved)} images saved successfully."
     })
@@ -217,44 +229,53 @@ def embed_files():
         file_path = os.path.join(file_dir, file_name)
         ext = "." + file_name.split(".")[-1].lower()
 
-        image_paths = []
-        image_descriptions = []
-
+        # === 🟢 First: TEXT-BASED EMBEDDINGS ===
         if ext in DOC_EXTENSIONS:
             try:
-                # Extract and embed text
                 text_chunks = extract_text(file_path, chunk_size)
                 total_text_vectors += len(text_chunks)
                 file_paths = [file_path] * len(text_chunks)
+
                 if text_chunks:
-                    vector_store_manager.upsert_vectors(index_name, file_name, file_paths, text_chunks, "text")
+                    vector_store_manager.upsert_vectors(
+                        index_name,
+                        src_doc=file_name,
+                        file_paths=file_paths,
+                        chunks=text_chunks,
+                        embed_type="text"
+                    )
             except Exception as e:
                 print(f"Error extracting text from {file_name}: {e}")
-                continue
 
-            # Look for alt_image_map.json to embed images
-            alt_map_path = os.path.join(file_dir, "alt_image_map.json")
-            if os.path.exists(alt_map_path):
-                try:
-                    with open(alt_map_path, "r", encoding="utf-8") as f:
-                        alt_images_info = json.load(f)
-                    for entry in alt_images_info:
-                        img_path = entry["path"]
-                        alt_text = entry["alt_text"]
-                        if os.path.exists(img_path):
-                            image_paths.append(img_path)
-                            image_descriptions.append(alt_text)
-                except Exception as e:
-                    print(f"Error reading alt_image_map.json for {file_name}: {e}")
+        # === 🟢 Second: IMAGE-BASED EMBEDDINGS via alt_image_map.json ===
+        alt_map_path = os.path.join(file_dir, "alt_image_map.json")
+        if os.path.exists(alt_map_path):
+            try:
+                with open(alt_map_path, "r", encoding="utf-8") as f:
+                    alt_images_info = json.load(f)
 
-        elif ext in IMG_EXTENSIONS:
-            print("Image path: ", file_path)
-            image_paths = [file_path]
-            image_descriptions = [generate_gpt4_description(file_path)]
-            print("Generated description: ", image_descriptions)
-        if image_descriptions:
-            vector_store_manager.upsert_vectors(index_name, file_name, image_paths, image_descriptions, "image")
-            total_image_vectors += len(image_descriptions)
+                image_paths = []
+                image_descriptions = []
+
+                for entry in alt_images_info:
+                    img_path = entry.get("path")
+                    alt_text = entry.get("alt_text")
+                    if os.path.exists(img_path) and alt_text:
+                        image_paths.append(img_path)
+                        image_descriptions.append(alt_text)
+
+                if image_descriptions:
+                    vector_store_manager.upsert_vectors(
+                        index_name,
+                        src_doc=file_name,
+                        file_paths=image_paths,
+                        chunks=image_descriptions,
+                        embed_type="image"
+                    )
+                    total_image_vectors += len(image_descriptions)
+
+            except Exception as e:
+                print(f"Error reading alt_image_map.json for {file_name}: {e}")
 
     return jsonify({
         "message": f"Embedding complete: {total_text_vectors} text chunks and {total_image_vectors} images processed."

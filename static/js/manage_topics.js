@@ -231,26 +231,39 @@ function deleteTopic() {
     });
 }
 
+$('#file-input').on('change', function() {
+    let file = this.files[0];
+    if (!file) return;
+    let ext = file.name.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png'].includes(ext)) {
+        $('#image-description-container').show();
+    } else {
+        $('#image-description-container').hide();
+        $('#image-description').val(''); // Clear previous entry
+    }
+});
+
 function uploadDocument() {
     let file = $('#file-input')[0].files[0];
     let indexName = $('#existing-index-select').val();
-
     if (!file || !indexName) {
         alert("Please select an index and a file.");
         return;
     }
 
-    let allowedExtensions = ['pdf', 'docx', 'pptx', 'txt', 'jpg', 'jpeg', 'png'];
-    let fileExtension = file.name.split('.').pop().toLowerCase();
-
-    if (!allowedExtensions.includes(fileExtension)) {
-        alert("Invalid file type! Please upload a TXT, PDF, DOCX, PPTX, JPG/JPEG, or PNG file.");
+    let ext = file.name.split('.').pop().toLowerCase();
+    let description = $('#image-description').val().trim();
+    if (['jpg', 'jpeg', 'png'].includes(ext) && !description) {
+        alert("Please provide a description for the image.");
         return;
     }
 
     let formData = new FormData();
     formData.append('file', file);
     formData.append('index_name', indexName);
+    if (description) {
+        formData.append('image_description', description);
+    }
 
     $.ajax({
         url: '/upload_document',
@@ -261,6 +274,8 @@ function uploadDocument() {
         success: function(response) {
             alert(response.message);
             listUploadedFiles();
+            $('#image-description-container').hide();
+            $('#image-description').val('');
         },
         error: function(xhr) {
             alert("Error uploading file: " + xhr.responseText);
