@@ -330,6 +330,16 @@ def query():
     response = run_query(query_text, topics, use_general_knowledge)
     return jsonify({"response": str(response)})
 
+from flask import send_from_directory
+import urllib.parse
+import os
+from helpers import UPLOAD_FOLDER
+
+@app.route(f'/{UPLOAD_FOLDER}/<path:filename>')
+def serve_uploaded_file(filename):
+    safe_path = urllib.parse.unquote(filename)
+    return send_from_directory(UPLOAD_FOLDER, safe_path)
+
 @app.route('/load_conversation', methods=['GET'])
 def get_chat_history_api():
     history = get_chat_history()

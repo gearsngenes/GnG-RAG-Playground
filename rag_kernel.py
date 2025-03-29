@@ -12,10 +12,11 @@ from semantic_kernel.functions.kernel_function_decorator import kernel_function
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
+from urllib.parse import quote
 import os
 
 # === Custom module imports ===
-from helpers import OPENAI_API_KEY, client as turbo_client, encode_image
+from helpers import OPENAI_API_KEY, client as turbo_client, encode_image, UPLOAD_FOLDER
 from pinecone_utils import vector_store_manager
 
 # === Initialize Kernel & Planner Globally ===
@@ -42,8 +43,6 @@ settings.function_choice_behavior = FunctionChoiceBehavior.Auto(filters={"includ
 
 # === Initialize Chat History ===
 chat_history = ChatHistory()
-#chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content="Hello"))
-#chat_history.add_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content="Hi there!"))
 
 # === Define Custom Plugin Classes ===
 class QueryPlugin:
@@ -51,14 +50,6 @@ class QueryPlugin:
     Plugin for handling user queries, retrieving topic-relevant chunks,
     and answering using embedded data or fallback general knowledge (if permitted).
     """
-
-    # @kernel_function(name="fetch_topic_descriptions",
-    #                  description="Retrieve relevant topics and descriptions from Pinecone")
-    # async def fetch_topic_descriptions(
-    #         self,
-    # ) -> Annotated[str, "A stringified dictionary of topics and their descriptions"]:
-    #     topics_dict = vector_store_manager.get_descriptions()
-    #     return str(topics_dict)
 
     @kernel_function(name="determine_relevant_topics",
                      description="Identify the most relevant topics for the user's query")
@@ -96,7 +87,6 @@ class QueryPlugin:
             prompt=prompt,
             settings=settings,
         )
-        #print("PRE: Found topics: ", response)
         return response
 
     @kernel_function(name="retrieve_context_chunks",
@@ -112,8 +102,6 @@ class QueryPlugin:
         general_knowledge_request = "No relevant context found"
         no_information_found = "no_information_found"
 
-        # print("Found topics: ", topics)
-
         def find_valid_list(text):
             match = re.search(r"\[\s*(?:'[^']*'(?:\s*,\s*'[^']*')*)?\s*\]", text)
             return match.group(0) if match else None
@@ -127,11 +115,9 @@ class QueryPlugin:
         except Exception:
             return no_information_found
 
-        # Explicit logic for 'general'
         if found_list == ['general']:
             return general_knowledge_request if use_general_knowledge.lower() == "true" else no_information_found
 
-        # Filter out 'general' if general knowledge not allowed
         if use_general_knowledge.lower() != "true":
             found_list = [topic for topic in found_list if topic.lower() != 'general']
             if not found_list:
@@ -139,6 +125,7 @@ class QueryPlugin:
 
         context_texts = []
         image_paths = []
+        file_links = []
         existing_indexes = vector_store_manager.list_indexes()
 
         for topic in found_list:
@@ -148,15 +135,26 @@ class QueryPlugin:
             for metadata in metadata_list:
                 chunk_type = metadata.get("type", "text")
                 content = metadata.get("content", "")
-                image_path = metadata.get("file_path")
+                file_path = metadata.get("file_path").replace("\\", "/")
+
+                if file_path.startswith(f"{UPLOAD_FOLDER}/"):
+                    relative_path = file_path[len(f"{UPLOAD_FOLDER}/"):]
+                else:
+                    relative_path = file_path
+                url_path = f"/{UPLOAD_FOLDER}/{quote(relative_path)}"
+                filename = os.path.basename(file_path)
+                markdown_link = f"[{filename}]({url_path})"
+
                 if chunk_type == "image":
-                    image_paths.append(image_path)
-                context_texts.append(f"{content}\n File source: {image_path}")
+                    image_paths.append(file_path)
+
+                context_texts.append(f"{content}\nFile source: {file_path}")
+                file_links.append(markdown_link)
 
         if not context_texts and not image_paths:
             return general_knowledge_request if use_general_knowledge.lower() == "true" else no_information_found
 
-        return str({"text_chunks": context_texts, "image_paths": image_paths})
+        return str({"text_chunks": context_texts, "image_paths": image_paths, "file_links": file_links})
 
     @kernel_function(name="answer_query",
                      description="Answer the user query with retrieved context, including images if available.")
@@ -169,11 +167,11 @@ class QueryPlugin:
         if retrieved_data == "no_information_found":
             return (
                 "❌ Sorry, we couldn’t find any relevant topics or matching content "
-                "in your uploaded documents to answer your question. Please try rephrasing or uploading new sources."
+                "in your uploaded documents to answer your question. Please try rephrasing "
+                "your query or uploading new sources."
             )
 
         if retrieved_data == "No relevant context found":
-            # Fall back to general knowledge
             prompt = f"Answer the following question using your general knowledge:\n\nQuery: {query}"
             settings = kernel.get_prompt_execution_settings_from_service_id(service_id="chat")
             response = await kernel.invoke_prompt(
@@ -184,7 +182,6 @@ class QueryPlugin:
             )
             return response
 
-        # Standard case: we have valid retrieved content
         try:
             retrieved_dict = ast.literal_eval(retrieved_data)
         except Exception:
@@ -192,47 +189,61 @@ class QueryPlugin:
 
         text_chunks = retrieved_dict.get("text_chunks", [])
         image_paths = retrieved_dict.get("image_paths", [])
+        file_links = list(set(retrieved_dict.get("file_links", [])))
 
         encoded_images = []
         for img_path in image_paths:
             if os.path.exists(img_path):
                 encoded_img = encode_image(img_path)
+                ext = os.path.splitext(img_path)[1].lower().lstrip(".")
                 encoded_images.append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_img}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{encoded_img}"}}
                 )
 
         formatted_context = "\n\n".join(text_chunks)
-        text_only_prompt = f"""
-        Use the following retrieved information as context to intelligently
-        answer the user's query. If the user asks for a source, please list
-        the file path or image name associated with it. Be sure to ONLY use
-        information that you can find from the retrieved chunks below to
-        answer the query. Do NOT use your general knowledge base.
-        
-        Retrieved information:
-        {formatted_context}
-        
-        Full conversation & User Query to answer:
-        {query}
-        """
+        prompt = f"""
+    You are a precise assistant generating Markdown-ready answers for a web app.
+    
+    Use the retrieved information below to answer the user's query. **Only** use information from these chunks. Do **not** rely on general knowledge.
+    
+    Return ONLY the response itself, no sources or additional text.
+    ---
+    
+    Retrieved Chunks:
+    {formatted_context}
+    
+    ---
+    User Query:
+    {query}
+    """
 
         if encoded_images:
-            full_prompt = text_only_prompt + "\n\n Please also use any retrieved images to aid in answering the query."
-            messages = [{"role": "user", "content": [{"type": "text", "text": full_prompt}] + encoded_images}]
-            response = turbo_client.chat.completions.create(
+            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}] + encoded_images}]
+            raw_response = turbo_client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=messages
-            )
-            return response.choices[0].message.content
+            ).choices[0].message.content
         else:
             settings = kernel.get_prompt_execution_settings_from_service_id(service_id="chat")
-            response = await kernel.invoke_prompt(
+            raw_response = await kernel.invoke_prompt(
                 function_name="answer_query",
                 plugin_name="QueryResponse",
-                prompt=text_only_prompt,
+                prompt=prompt,
                 settings=settings,
             )
-            return response
+
+        final_answer = str(raw_response).strip()
+        all_links = "\n".join(file_links)
+        final_response = f"""
+{final_answer}
+
+### Sources
+
+{all_links}
+"""
+
+        # print("FINAL RESPONSE: ", final_response)
+        return final_response
 
 # === Add Plugins to the Kernel ===
 kernel.add_plugin(QueryPlugin(), plugin_name="QueryResponse",
