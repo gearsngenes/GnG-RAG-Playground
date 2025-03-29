@@ -77,14 +77,25 @@ def extract_images_from_docx(document_dir, file_path, images_dir):
     images = []
     alt_text_map = []
 
-    for i, shape in enumerate(doc.inline_shapes):
+    for shape in doc.inline_shapes:
         alt_text = shape._inline.docPr.get("descr")
-        if alt_text:
+        if not alt_text or ':' not in alt_text:
+            continue
+
+        image_name, _, alt_content = alt_text.partition(':')
+        image_name = image_name.strip()
+        alt_content = alt_content.strip()
+
+        if not image_name or not alt_content:
+            continue
+
+        try:
             rel_id = shape._inline.graphic.graphicData.pic.blipFill.blip.embed
             image_part = doc.part.related_parts[rel_id]
             image_bytes = image_part.blob
 
-            img_filename = f"image-{i}.jpg"
+            ext = "jpg"
+            img_filename = f"{image_name}.{ext}"
             img_path = os.path.join(images_dir, img_filename)
 
             with open(img_path, "wb") as f:
@@ -93,14 +104,16 @@ def extract_images_from_docx(document_dir, file_path, images_dir):
             images.append(img_path)
             alt_text_map.append({
                 "path": img_path,
-                "alt_text": alt_text
+                "alt_text": alt_content
             })
+        except Exception:
+            continue
 
-    # Save alt-text ↔ image path mappings
     if alt_text_map:
         map_file_path = os.path.join(document_dir, "alt_image_map.json")
         with open(map_file_path, "w", encoding="utf-8") as f:
             json.dump(alt_text_map, f, indent=4)
+
     return images
 
 def extract_images_from_pptx(document_dir, file_path, images_dir):
@@ -108,9 +121,9 @@ def extract_images_from_pptx(document_dir, file_path, images_dir):
     os.makedirs(images_dir, exist_ok=True)
     images = []
     alt_text_map = []
-    image_count = 0  # Counter for saved images
-    for slide_num, slide in enumerate(prs.slides, start=1):
-        for shape_num, shape in enumerate(slide.shapes, start=1):
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 try:
                     nvPicPr = shape._element.find(qn('p:nvPicPr'))
@@ -118,31 +131,33 @@ def extract_images_from_pptx(document_dir, file_path, images_dir):
                         cNvPr = nvPicPr.find(qn('p:cNvPr'))
                         if cNvPr is not None:
                             alt_text = cNvPr.get('descr')
-                            if alt_text:
-                                # Extract image bytes
-                                image = shape.image
-                                image_bytes = image.blob
-                                image_ext = image.ext  # e.g., 'jpeg', 'png'
+                            if not alt_text or ':' not in alt_text:
+                                continue
 
-                                img_filename = f"image-{image_count}.{image_ext}"
-                                img_path = os.path.join(images_dir, img_filename)
+                            image_name, _, alt_content = alt_text.partition(':')
+                            image_name = image_name.strip()
+                            alt_content = alt_content.strip()
 
-                                with open(img_path, "wb") as f:
-                                    f.write(image_bytes)
+                            if not image_name or not alt_content:
+                                continue
 
-                                images.append(img_path)
-                                alt_text_map.append({
-                                    "path": img_path,
-                                    "alt_text": alt_text
-                                })
+                            image = shape.image
+                            ext = image.ext
+                            image_bytes = image.blob
+                            img_filename = f"{image_name}.{ext}"
+                            img_path = os.path.join(images_dir, img_filename)
 
-                                image_count += 1  # Increment for next image
+                            with open(img_path, "wb") as f:
+                                f.write(image_bytes)
 
-                except Exception as e:
-                    # Optional debug print
-                    # print(f"Error processing slide {slide_num}, shape {shape_num}: {e}")
-                    pass
-    # Save alt-text ↔ image path mappings
+                            images.append(img_path)
+                            alt_text_map.append({
+                                "path": img_path,
+                                "alt_text": alt_content
+                            })
+                except Exception:
+                    continue
+
     if alt_text_map:
         map_file_path = os.path.join(document_dir, "alt_image_map.json")
         with open(map_file_path, "w", encoding="utf-8") as f:

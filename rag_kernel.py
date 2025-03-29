@@ -148,7 +148,7 @@ class QueryPlugin:
                 if chunk_type == "image":
                     image_paths.append(file_path)
 
-                context_texts.append(f"{content}\nFile source: {file_path}")
+                context_texts.append(f"{content}\nSource URL: {markdown_link}")
                 file_links.append(markdown_link)
 
         if not context_texts and not image_paths:
@@ -204,9 +204,13 @@ class QueryPlugin:
         prompt = f"""
     You are a precise assistant generating Markdown-ready answers for a web app.
     
-    Use the retrieved information below to answer the user's query. **Only** use information from these chunks. Do **not** rely on general knowledge.
+    Use the retrieved information below to answer the user's query. **Only** use
+    information from these chunks. Do **not** rely on general knowledge. If you
+    want to cite a specific source, use the corresponding Markdown link provided
+    next to each chunk to indicate the information source when inserting it into
+    the response.
     
-    Return ONLY the response itself, no sources or additional text.
+    Return ONLY the response itself.
     ---
     
     Retrieved Chunks:
@@ -233,17 +237,16 @@ class QueryPlugin:
             )
 
         final_answer = str(raw_response).strip()
-        all_links = "\n".join(file_links)
-        final_response = f"""
-{final_answer}
+        # all_links = "\n".join(file_links)
+#         final_response = f"""
+# {final_answer}
+#
+# ### Sources
+#
+# {all_links}
+# """
 
-### Sources
-
-{all_links}
-"""
-
-        # print("FINAL RESPONSE: ", final_response)
-        return final_response
+        return final_answer#final_response
 
 # === Add Plugins to the Kernel ===
 kernel.add_plugin(QueryPlugin(), plugin_name="QueryResponse",
