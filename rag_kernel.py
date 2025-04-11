@@ -208,7 +208,13 @@ class QueryPlugin:
     information from these chunks. Do **not** rely on general knowledge. If you
     want to cite a specific source, use the corresponding Markdown link provided
     next to each chunk to indicate the information source when inserting it into
-    the response.
+    the response. When inserting the markdown links, be sure to abide by the
+    following rules:
+    1) include them only once, where they are first mentioned
+    2) if they are images, then make sure to preceed them with an '!' to make
+       the images actually render, and on a separate line from the text before
+       the link is used.
+    3) if they are not images, then just provide the standard markdown link
     
     Return ONLY the response itself.
     ---
