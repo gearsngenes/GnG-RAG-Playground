@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from pinecone_utils import vector_store_manager
-from rag_kernel import run_query, clear_sk_memory, get_chat_history
+from rag_kernel import run_query, clear_sk_memory, get_sk_chat_history
+from rag_chain import run_langchain_query, get_chat_history, clear_chat_memory
 import os
 import shutil
 import json
@@ -8,10 +9,10 @@ from helpers import (UPLOAD_FOLDER,
                      DOC_EXTENSIONS,
                      IMG_EXTENSIONS,
                      extract_text,
-                     generate_gpt4_description,
                      extract_images_from_pdf,
                      extract_images_from_docx,
                      extract_images_from_pptx)
+import urllib.parse
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
@@ -327,13 +328,14 @@ def query():
     use_general_knowledge = data.get("use_general_knowledge", True)
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
-    response = run_query(query_text, topics, use_general_knowledge)
-    return jsonify({"response": str(response)})
+    response = run_langchain_query(query_text, topics, use_general_knowledge)
 
-from flask import send_from_directory
-import urllib.parse
-import os
-from helpers import UPLOAD_FOLDER
+    """
+    vvv uncomment the below line if you wish to instead use the semantic kernel alternative. vvv
+    """
+    # response = run_query(query_text, topics, use_general_knowledge)
+
+    return jsonify({"response": str(response)})
 
 @app.route(f'/{UPLOAD_FOLDER}/<path:filename>')
 def serve_uploaded_file(filename):
@@ -342,12 +344,14 @@ def serve_uploaded_file(filename):
 
 @app.route('/load_conversation', methods=['GET'])
 def get_chat_history_api():
+    #history = get_sk_chat_history()
     history = get_chat_history()
     return jsonify({"chat_history": history})
 
 @app.route('/clear_chat', methods=['POST'])
 def clear_chat():
-    clear_sk_memory()
+    #clear_sk_memory()
+    clear_chat_memory()
     return jsonify({"message": "Chat history cleared."})
 
 # === To start the application ===

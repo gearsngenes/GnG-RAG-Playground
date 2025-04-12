@@ -311,7 +311,7 @@ def clear_sk_memory():
     """Clears the stored conversation history in SK's built-in text memory."""
     chat_history.clear()
 
-def get_chat_history():
+def get_sk_chat_history():
     """Returns the chat history as a list of dictionaries with role and content."""
     return [
         {"role": msg.role.value, "content": msg.content}

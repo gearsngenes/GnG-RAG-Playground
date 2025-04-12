@@ -6,10 +6,10 @@ For instance, if you are, say, a teacher trying to provide additional assistance
 
 ## The Tech Stack
 As mentioned earlier, the API runs on Flask for the backend of this interface, but other noteworthy platforms/api's to take note of include:
-
-- **Semantic Kernel**: Semantic Kernel is an intelligent planner library that can take in natural language descriptions of plans we want to execute, and intelligently creates an order of in which to execute specific methods, without us having to explicitly define this order of method calls. This is also the backbone of how the chatbot knows what topics and types of documents to use for reference before actually retrieving them. 
+- **LangChain**: Langchain is an AI orchestrator that helps with efficiently chaining multiple AI and method calls together to create pipelines for advanced tasks. This is the backbone for our RAG Playground to dynamically identify which topics are relevant to our queries and to retrieve relevant information where available. 
+- **(Inactive) Semantic Kernel**: Semantic Kernel is an intelligent orchestrator, similar to Langchain, that in older versions of our playground helped create the pipeline for our RAG playground nondeterministically. While the code in this branch is now using its LangChain counterpart, the code for using semantic kernel is still available to use and call. 
 - **Pinecone**: This is the vector store database that we use to store our documents that we want to use for our RAG model. For each general "topic" we define, we create a specific corresponding Pinecone index. When we then upload files for our RAG model to use for reference, we first break the document text into smaller pieces or "chunks" that we then retrieve for additional context to answer queries later on.
-- **OpenAI**: Ultimately Semantic Kernel is built on the OpenAI API, and I also make occassional calls to the OpenAI API directly instead of semantic kernel, particularly when generating descriptions for uploaded images for the RAG to use.
+- **OpenAI**: Ultimately Semantic Kernel is built on the OpenAI API, and I also make occassional calls to the OpenAI API directly instead of semantic kernel or langchain, particularly when generating descriptions for uploaded images for the RAG to use.
 
 ## Files of Note
 Here is the high-level breakdown of what files you need to know about in order to run this playground.
@@ -21,7 +21,10 @@ This is the file that is running your Flask API. It is also this file that you w
 ### pinecone_utils.py
 This is the file that supports the pinecone vector management. This is what handles the creation, deletion, and modification of indexes on PineCone and what stores the embedded versions of uploaded files. 
 
-### rag_kernel.py
+### rag_chain.py
+This is the file that handles LangChain logic with regards to actually retrieving chunks of contextually relevant information and answering user queries.
+
+### (Inactive) rag_kernel.py
 This is the file that handles Semantic Kernel logic with regards to actually retrieving chunks of contextually relevant information and answering user queries.
 
 ### helpers.py
