@@ -40,6 +40,12 @@ function sendQuery() {
         }
     });
 }
+$('#query-input').keypress(function(e) {
+    if (e.which === 13 && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery();
+    }
+});
 
 function clearChat() {
     $.post('/clear_chat', function(response) {
