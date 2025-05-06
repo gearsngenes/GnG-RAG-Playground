@@ -90,6 +90,7 @@ def extract_images_from_docx(document_dir, file_path, images_dir):
             continue
 
         try:
+            image_name = image_name.replace(" ","_")
             rel_id = shape._inline.graphic.graphicData.pic.blipFill.blip.embed
             image_part = doc.part.related_parts[rel_id]
             image_bytes = image_part.blob
@@ -140,7 +141,7 @@ def extract_images_from_pptx(document_dir, file_path, images_dir):
 
                             if not image_name or not alt_content:
                                 continue
-
+                            image_name = image_name.replace(" ","_")
                             image = shape.image
                             ext = image.ext
                             image_bytes = image.blob

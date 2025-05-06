@@ -146,21 +146,30 @@ a particular topic:
 """
 @app.route('/list_uploaded_files', methods=['POST'])
 def list_uploaded_files():
-    """Lists the names of uploaded files for a given topic/index with their embedding status."""
+    """Lists the names of uploaded files (cleaned) and their embedding status."""
     data = request.get_json()
     index_name = data.get("index_name")
     if not index_name:
         return jsonify({"error": "Index name is required."}), 400
-    folder_path = os.path.join(UPLOAD_FOLDER, index_name)
-    if not os.path.exists(folder_path):
+
+    topic_path = os.path.join(UPLOAD_FOLDER, index_name)
+    if not os.path.exists(topic_path):
         return jsonify({"files": []})
 
-    files = os.listdir(folder_path)
     file_info = []
 
-    for file_name in files:
-        embedded = vector_store_manager.is_embedded(index_name, file_name)
-        file_info.append({"name": file_name, "embedded": embedded})
+    for dirname in os.listdir(topic_path):
+        document_dir = os.path.join(topic_path, dirname)
+        if not os.path.isdir(document_dir):
+            continue
+
+        # Derive filename from directory name
+        clean_filename = dirname.replace("_dot_", ".")
+        file_path = os.path.join(document_dir, clean_filename)
+
+        if os.path.exists(file_path):
+            embedded = vector_store_manager.is_embedded(index_name, clean_filename)
+            file_info.append({"name": clean_filename, "embedded": embedded})
 
     return jsonify({"files": file_info})
 
@@ -175,21 +184,26 @@ def upload_document():
     if not file:
         return jsonify({"error": "No file provided."}), 400
 
-    topic_dir = os.path.join(UPLOAD_FOLDER, index_name)
-    os.makedirs(topic_dir, exist_ok=True)
+    # === 🆕 Sanitize filename and directory name
+    original_filename = file.filename
+    clean_filename = original_filename.replace(" ", "_")
+    dir_name = clean_filename.replace(".", "_dot_")
 
-    document_dir = os.path.join(topic_dir, file.filename)
+    topic_dir = os.path.join(UPLOAD_FOLDER, index_name)
+    document_dir = os.path.join(topic_dir, dir_name)
     os.makedirs(document_dir, exist_ok=True)
-    file_path = os.path.join(document_dir, file.filename)
+
+    file_path = os.path.join(document_dir, clean_filename)
     file.save(file_path)
 
-    ext = "." + file.filename.split(".")[-1].lower()
+    ext = os.path.splitext(clean_filename)[-1].lower()
     images_saved = []
 
     if ext not in IMG_EXTENSIONS:
-        # For docs (PDF/DOCX/PPTX), extract embedded images
+        # === 📄 Document — extract embedded images if applicable
         document_image_dir = os.path.join(document_dir, "images")
         os.makedirs(document_image_dir, exist_ok=True)
+
         if ext.endswith(".pdf"):
             images_saved = extract_images_from_pdf(document_dir, file_path, document_image_dir)
         elif ext.endswith(".docx"):
@@ -197,7 +211,7 @@ def upload_document():
         elif ext.endswith(".pptx"):
             images_saved = extract_images_from_pptx(document_dir, file_path, document_image_dir)
     else:
-        # For standalone images
+        # === 🖼 Standalone image
         images_saved = [file_path]
         if user_description:
             alt_map_path = os.path.join(document_dir, "alt_image_map.json")
@@ -208,7 +222,7 @@ def upload_document():
                 }], f, indent=4)
 
     return jsonify({
-        "message": f"Document '{file.filename}' and {len(images_saved)} images saved successfully."
+        "message": f"Document '{clean_filename}' and {len(images_saved)} images saved successfully."
     })
 
 @app.route('/embed_files', methods=['POST'])
@@ -225,12 +239,13 @@ def embed_files():
     total_text_vectors = 0
     total_image_vectors = 0
 
-    for file_name in files_to_embed:
-        file_dir = os.path.join(topic_path, file_name)
-        file_path = os.path.join(file_dir, file_name)
-        ext = "." + file_name.split(".")[-1].lower()
+    for clean_filename in files_to_embed:
+        dir_name = clean_filename.replace(".", "_dot_")
+        file_dir = os.path.join(topic_path, dir_name)
+        file_path = os.path.join(file_dir, clean_filename)
+        ext = os.path.splitext(clean_filename)[-1].lower()
 
-        # === 🟢 First: TEXT-BASED EMBEDDINGS ===
+        # === TEXT ===
         if ext in DOC_EXTENSIONS:
             try:
                 text_chunks = extract_text(file_path, chunk_size)
@@ -239,16 +254,16 @@ def embed_files():
 
                 if text_chunks:
                     vector_store_manager.upsert_vectors(
-                        index_name,
-                        src_doc=file_name,
+                        index_name=index_name,
+                        src_doc=clean_filename,
                         file_paths=file_paths,
                         chunks=text_chunks,
                         embed_type="text"
                     )
             except Exception as e:
-                print(f"Error extracting text from {file_name}: {e}")
+                print(f"Error extracting text from {clean_filename}: {e}")
 
-        # === 🟢 Second: IMAGE-BASED EMBEDDINGS via alt_image_map.json ===
+        # === IMAGE ===
         alt_map_path = os.path.join(file_dir, "alt_image_map.json")
         if os.path.exists(alt_map_path):
             try:
@@ -267,8 +282,8 @@ def embed_files():
 
                 if image_descriptions:
                     vector_store_manager.upsert_vectors(
-                        index_name,
-                        src_doc=file_name,
+                        index_name=index_name,
+                        src_doc=clean_filename,
                         file_paths=image_paths,
                         chunks=image_descriptions,
                         embed_type="image"
@@ -276,7 +291,7 @@ def embed_files():
                     total_image_vectors += len(image_descriptions)
 
             except Exception as e:
-                print(f"Error reading alt_image_map.json for {file_name}: {e}")
+                print(f"Error reading alt_image_map.json for {clean_filename}: {e}")
 
     return jsonify({
         "message": f"Embedding complete: {total_text_vectors} text chunks and {total_image_vectors} images processed."
@@ -287,14 +302,15 @@ def unembed_files():
     data = request.json
     index_name = data.get("index_name")
     files_to_unembed = list(data.get("files", []))
+
     if not index_name or not files_to_unembed:
         return jsonify({"error": "Index name and files to unembed are required."}), 400
 
-    for file_name in files_to_unembed:
+    for clean_filename in files_to_unembed:
         try:
-            vector_store_manager.delete_vectors_by_source(index_name, file_name)
+            vector_store_manager.delete_vectors_by_source(index_name, clean_filename)
         except Exception as e:
-            return jsonify({"error": f"Failed to unembed '{file_name}': {str(e)}"}), 500
+            return jsonify({"error": f"Failed to unembed '{clean_filename}': {str(e)}"}), 500
 
     return jsonify({"message": f"Vectors for selected files have been removed from '{index_name}'."})
 
@@ -306,11 +322,14 @@ def delete_files():
     if not index_name or not files_to_delete:
         return jsonify({"error": "Index name and files to delete are required."}), 400
 
-    for file_name in files_to_delete:
-        document_dir = os.path.join(UPLOAD_FOLDER, index_name, file_name)
+    for clean_filename in files_to_delete:
+        dir_name = clean_filename.replace(".", "_dot_")
+        document_dir = os.path.join(UPLOAD_FOLDER, index_name, dir_name)
+
         if os.path.exists(document_dir):
             shutil.rmtree(document_dir)
-        vector_store_manager.delete_vectors_by_source(index_name, file_name)
+
+        vector_store_manager.delete_vectors_by_source(index_name, clean_filename)
 
     return jsonify({"message": f"Selected files and associated data have been deleted from '{index_name}'."})
 
