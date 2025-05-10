@@ -47,12 +47,14 @@ topic_selector_chain = topic_selector_prompt | llm
 answer_prompt = PromptTemplate.from_template("""
 You are a Markdown-ready assistant responding to a conversation.
 
-Use ONLY the following chunks and image links to answer the latest user question in the context of the full discussion.
+Use ONLY the following text chunks and image descriptions to answer the latest user question in the context of the full discussion.
 
-Each chunk has a source markdown link. Follow these rules:
-- Use the link only once, the first time the content is mentioned.
-- Use ! in front of links if they are images.
-- Only use this information — do not rely on general knowledge.
+Each chunk and description has a source markdown link to refer to the original source from when generating a response. Follow these citation rules:
+- If you use information from a specific source from the context chunks to generate a response, then you MUST a) explicitly refer to the name of the source file you are referring, AND b) incorporate the corresponding markdown link into the response to provide the user a way to view the source.
+- You can only use a specific markdown link once, the first time you explicitly mention the source file that the content came from. Do NOT repeatedly display or link to the same file every time. 
+- If your source file that your information comes from is an image description, you MUST explicitly use a markdown link, and render the image by placing a `!` in front of the link to have the image fully render in the response.
+- If the user's query closely matches the description of an image, or implies or directly requests some visual, prioritize matching images to their request and fully rendering them.
+- Only use information contained within the text chunks and image descriptions — do not rely on general knowledge unless it is to fill in the gaps of what would be obvious knowledge or to mbest match information to the user's query that doesn't exactly match the wordings available.
 
 ---
 Chunks:
@@ -63,7 +65,7 @@ Conversation History:
 {chat_history}
 
 ---
-Answer the most recent user query.
+Respond to the latest user query/statement.
 """)
 
 answer_chain = answer_prompt | llm
@@ -89,17 +91,20 @@ def retrieve_chunks(topics, query, use_general_knowledge=True):
 
             relative_path = file_path[len(f"{UPLOAD_FOLDER}/"):] if file_path.startswith(f"{UPLOAD_FOLDER}/") else file_path
             url_path = f"/{UPLOAD_FOLDER}/{quote(relative_path)}"
-            markdown_link = f"[{os.path.basename(file_path)}]({url_path})"
+            filename = os.path.basename(file_path)
 
             if chunk_type == "image":
-                image_paths.append(f"![]({url_path})")
+                # Integrate alt-text explicitly into Markdown image tag
+                markdown_link = f"![{content}]({url_path})"
+                image_paths.append(markdown_link)
             else:
+                markdown_link = f"[{filename}]({url_path})"
                 context_texts.append(f"{content}\nSource URL: {markdown_link}")
 
     if not context_texts and not image_paths:
         return "No relevant context found" if use_general_knowledge else "no_information_found"
 
-    return "\n\n".join(context_texts + image_paths)
+    return "<TEXT CHUNKS>\n" + "\n\n".join(context_texts) + "\n\n<IMAGE DESCRIPTIONS>\n" + "\n\n".join(image_paths)
 
 
 # === Retrieval → Answer chain
