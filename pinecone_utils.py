@@ -134,7 +134,7 @@ class PineconeManager:
         index = self.pc.Index(index_name)
         index.upsert(vectors=pc_vectors, namespace=namespace)
 
-    def query_at_index(self, index_name, query, top_k=5):
+    def query_at_index(self, index_name, query, top_k=5, filter=None):
         """Queries the specified index using the embedded query and returns list of metadata contents."""
         embedding = get_embedding(query)
         index = self.pc.Index(index_name)
@@ -142,7 +142,8 @@ class PineconeManager:
             vector=embedding,
             top_k=top_k,
             namespace="docs",
-            include_metadata=True
+            include_metadata=True,
+            filter= filter or {}
         )
         return [match.get("metadata", {}) for match in results.get("matches", [])]
 

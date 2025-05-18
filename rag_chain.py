@@ -83,28 +83,46 @@ def retrieve_chunks(topics, query, use_general_knowledge=True):
         if topic not in vector_store_manager.list_indexes():
             continue
 
-        metadata_list = vector_store_manager.query_at_index(topic, query)
-        for metadata in metadata_list:
+        # Get top 3 TEXT chunks
+        text_results = vector_store_manager.query_at_index(
+            index_name=topic,
+            query=query,
+            top_k=3,
+            filter={"type": {"$eq": "text"}}
+        )
+
+        for metadata in text_results:
             content = metadata.get("content", "")
             file_path = metadata.get("file_path").replace("\\", "/")
-            chunk_type = metadata.get("type", "text")
+            filename = os.path.basename(file_path)
 
             relative_path = file_path[len(f"{UPLOAD_FOLDER}/"):] if file_path.startswith(f"{UPLOAD_FOLDER}/") else file_path
             url_path = f"/{UPLOAD_FOLDER}/{quote(relative_path)}"
-            filename = os.path.basename(file_path)
+            markdown_link = f"[{filename}]({url_path})"
+            context_texts.append(f"{content}\nSource URL: {markdown_link}")
 
-            if chunk_type == "image":
-                # Integrate alt-text explicitly into Markdown image tag
-                markdown_link = f"![{content}]({url_path})"
-                image_paths.append(markdown_link)
-            else:
-                markdown_link = f"[{filename}]({url_path})"
-                context_texts.append(f"{content}\nSource URL: {markdown_link}")
+        # Get top 3 IMAGE descriptions
+        image_results = vector_store_manager.query_at_index(
+            index_name=topic,
+            query=query,
+            top_k=3,
+            filter={"type": {"$eq": "image"}}
+        )
+
+        for metadata in image_results:
+            content = metadata.get("content", "").replace("\n","")
+            file_path = metadata.get("file_path").replace("\\", "/")
+
+            relative_path = file_path[len(f"{UPLOAD_FOLDER}/"):] if file_path.startswith(f"{UPLOAD_FOLDER}/") else file_path
+            url_path = f"/{UPLOAD_FOLDER}/{quote(relative_path)}"
+            markdown_link = f"![{content}]({url_path})"
+            image_paths.append(markdown_link)
 
     if not context_texts and not image_paths:
         return "No relevant context found" if use_general_knowledge else "no_information_found"
-
-    return "<TEXT CHUNKS>\n" + "\n\n".join(context_texts) + "\n\n<IMAGE DESCRIPTIONS>\n" + "\n\n".join(image_paths)
+    final_context = "<TEXT CHUNKS>\n" + "\n\n".join(context_texts) + "\n\n<IMAGE DESCRIPTIONS>\n" + "\n\n".join(image_paths)
+    print("FINAL context retrieved: ", final_context)
+    return final_context
 
 
 # === Retrieval → Answer chain
