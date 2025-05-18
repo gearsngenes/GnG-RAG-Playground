@@ -87,7 +87,7 @@ def retrieve_chunks(topics, query, use_general_knowledge=True):
         text_results = vector_store_manager.query_at_index(
             index_name=topic,
             query=query,
-            top_k=3,
+            top_k=5,
             filter={"type": {"$eq": "text"}}
         )
 
@@ -105,7 +105,7 @@ def retrieve_chunks(topics, query, use_general_knowledge=True):
         image_results = vector_store_manager.query_at_index(
             index_name=topic,
             query=query,
-            top_k=3,
+            top_k=5,
             filter={"type": {"$eq": "image"}}
         )
 
