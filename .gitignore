@@ -3,6 +3,7 @@
 __pycache__/
 uploads/
 misc/
+.venv/
 # Ignore environment files
 .env
 
