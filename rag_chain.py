@@ -12,10 +12,10 @@ from helpers import encode_image, UPLOAD_FOLDER
 # === Global message history ===
 _message_history = []
 
-def clear_chat_memory():
+def clear_langchain_chat_memory():
     _message_history.clear()
 
-def get_chat_history():
+def get_langchain_chat_history():
     return _message_history.copy()
 
 def format_history():

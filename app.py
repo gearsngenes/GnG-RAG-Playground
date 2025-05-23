@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from pinecone_utils import vector_store_manager
 from rag_kernel import run_query, clear_sk_memory, get_sk_chat_history
-from rag_chain import run_langchain_query, get_chat_history, clear_chat_memory
+from rag_chain import run_langchain_query, get_langchain_chat_history, clear_langchain_chat_memory
+from rag_slm import run_slm_query, get_chat_history, clear_chat_memory
 import os
 import shutil
 import json
@@ -345,16 +346,13 @@ def query():
     query_text = data.get("query")
     topics = list(data.get("topics", []))
     use_general_knowledge = data.get("use_general_knowledge", True)
+
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
-    response = run_langchain_query(query_text, topics, use_general_knowledge)
 
-    """
-    vvv uncomment the below line if you wish to instead use the semantic kernel alternative. vvv
-    """
-    # response = run_query(query_text, topics, use_general_knowledge)
-
-    return jsonify({"response": str(response)})
+    result = run_slm_query(query_text, topics, use_general_knowledge)
+    print(result['response'])
+    return jsonify(result)
 
 @app.route(f'/{UPLOAD_FOLDER}/<path:filename>')
 def serve_uploaded_file(filename):
