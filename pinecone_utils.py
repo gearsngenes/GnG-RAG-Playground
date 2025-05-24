@@ -1,12 +1,15 @@
 from pinecone.grpc import PineconeGRPC as Pinecone
 from pinecone import ServerlessSpec
-from helpers import UPLOAD_FOLDER, get_embedding
+from helpers import UPLOAD_FOLDER
 import os
 import shutil
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 load_dotenv()
 
+DIM_LENGTH = 384
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 TABLE_OF_CONTENTS_INDEX = "table-of-contents"
 
@@ -15,16 +18,20 @@ class PineconeManager:
         self.pc = Pinecone(api_key=PINECONE_API_KEY)
         self.ensure_upload_folder()
         self.ensure_table_of_contents_index()
-
+        self.local_embedder = SentenceTransformer("intfloat/e5-small-v2")
     def ensure_upload_folder(self):
         if not os.path.exists(UPLOAD_FOLDER):
             os.makedirs(UPLOAD_FOLDER)
-
+    def get_embedding(self, text):
+        text = text.strip()
+        if not text:
+            return np.zeros(DIM_LENGTH).tolist()  # avoid empty input crashing
+        return self.local_embedder.encode(text, normalize_embeddings=True).tolist()
     def ensure_table_of_contents_index(self):
         if TABLE_OF_CONTENTS_INDEX not in self.pc.list_indexes().names():
             self.pc.create_index(
                 name=TABLE_OF_CONTENTS_INDEX,
-                dimension=1536,
+                dimension=DIM_LENGTH,
                 metric="cosine",
                 spec=ServerlessSpec(cloud='aws', region='us-east-1')
             )
@@ -35,7 +42,7 @@ class PineconeManager:
     def create_index(self, index_name):
         self.pc.create_index(
             name=index_name,
-            dimension=1536,
+            dimension=DIM_LENGTH,
             metric="cosine",
             spec=ServerlessSpec(cloud='aws', region='us-east-1')
         )
@@ -58,7 +65,7 @@ class PineconeManager:
 
     def upsert_metadata(self, index_name, description):
         index = self.pc.Index(TABLE_OF_CONTENTS_INDEX)
-        embedding = get_embedding(description)
+        embedding = self.get_embedding(description)
         vector = {
             "id": index_name,
             "values": embedding,
@@ -89,7 +96,7 @@ class PineconeManager:
     def delete_vectors_by_source(self, index_name, file_name):
         index = self.pc.Index(index_name)
         query_result = index.query(
-            vector=[0] * 1536,
+            vector=[0] * DIM_LENGTH,
             namespace="docs",
             top_k=1000,
             filter={"source": {"$eq": file_name}}
@@ -106,7 +113,7 @@ class PineconeManager:
         index = self.pc.Index(index_name)
         try:
             query_result = index.query(
-                vector=[0] * 1536,
+                vector=[0] * DIM_LENGTH,
                 namespace=namespace,
                 top_k=1,
                 filter={"source": {"$eq": file_name}},
@@ -121,7 +128,7 @@ class PineconeManager:
         pc_vectors = [
             {
                 "id": f"{src_doc}-{embed_type}-{i}",
-                "values": get_embedding(chunk),
+                "values": self.get_embedding(chunk),
                 "metadata": {
                     "content": chunk,
                     "source": src_doc,
@@ -136,7 +143,7 @@ class PineconeManager:
 
     def query_at_index(self, index_name, query, top_k=5, filter=None):
         """Queries the specified index using the embedded query and returns list of metadata contents."""
-        embedding = get_embedding(query)
+        embedding = self.get_embedding(query)
         index = self.pc.Index(index_name)
         results = index.query(
             vector=embedding,

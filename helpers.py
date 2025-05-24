@@ -167,11 +167,7 @@ def extract_images_from_pptx(document_dir, file_path, images_dir):
     return images
 
 #===RAG Helper Methods===
-def get_embedding(text):
-    """Generates an embedding for the given text."""
-    response = client.embeddings.create(input=text, model="text-embedding-ada-002")
-    return response.data[0].embedding
-
+# Initialize once globally
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
