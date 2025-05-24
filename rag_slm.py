@@ -2,7 +2,8 @@ import os
 import re
 from urllib.parse import quote
 from llama_cpp import Llama
-from pinecone_utils import vector_store_manager
+#from pinecone_utils import vector_store_manager
+from qdrant_utils import vector_store_manager
 from helpers import UPLOAD_FOLDER
 
 # === Model Setup ===
@@ -96,7 +97,7 @@ def run_slm_query(query, topics, use_general_knowledge=True):
         return {"think": "", "response": response}
 
     context = retrieve_chunks(topics, query, use_general_knowledge)
-
+    print("QUERY CONTEXT: ", context)
     if context == "no_information_found":
         if not use_general_knowledge:
             response = (

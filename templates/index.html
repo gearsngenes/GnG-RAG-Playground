@@ -28,19 +28,12 @@
 </head>
 <body>
 
-<h2>Gears N' Genes RAG Playground: Phi-4 Edition (v2.2)</h2>
+<h2>Gears N' Genes RAG Playground: Phi-4 Edition (v2.3)</h2>
 <button onclick="window.location.href='/manage_topics'">Manage Topics</button>
 
-<h3>SME Selection</h3>
-<label><input type="radio" name="sme-selection" value="ai" checked> AI-Selected SME</label>
-<label><input type="radio" name="sme-selection" value="human"> Human-Selected SME</label>
-
-<div id="general-knowledge-toggle" style="margin-top: 10px;">
-    <label><input type="checkbox" id="include-general-knowledge" checked> Include General Knowledge</label>
-</div>
-
-<div id="topic-selection" style="display: none; margin-top: 10px;">
-    <p>Select Topics (at least one):</p>
+<h3>Select Topics (Required)</h3>
+<div id="topic-selection" style="margin-top: 10px;">
+    <p>Select at least one topic:</p>
     <div id="topics-list"></div>
 </div>
 

@@ -5,18 +5,11 @@ function sendQuery() {
         return;
     }
 
-    let smeMode = $('input[name="sme-selection"]:checked').val();
-    let selectedTopics = [];
-
-    if (smeMode === 'human') {
-        selectedTopics = $('input[name="topics"]:checked').map((_, el) => el.value).get();
-        if (selectedTopics.length === 0) {
-            alert("Please select at least one topic for Human-Selected SME.");
-            return;
-        }
+    let selectedTopics = $('input[name="topics"]:checked').map((_, el) => el.value).get();
+    if (selectedTopics.length === 0) {
+        alert("Please select at least one topic.");
+        return;
     }
-
-    let useGeneralKnowledge = $('#include-general-knowledge').is(':checked');
 
     $('#chat-box').append(`<div class='message user'>User: ${escapeHtml(query)}</div>`);
     $('#query-input').val('');
@@ -28,7 +21,7 @@ function sendQuery() {
         data: JSON.stringify({
             query: query,
             topics: selectedTopics,
-            use_general_knowledge: useGeneralKnowledge
+            use_general_knowledge: false  // now fixed to false since fallback is disabled
         }),
         success: function(response) {
             let formattedResponse = marked.parse(response.response);
@@ -90,16 +83,9 @@ function loadTopicsList() {
     });
 }
 
-$(document).ready(function() {
+$(document).ready(function () {
     loadChatHistory();
-    $('input[name="sme-selection"]').change(function() {
-        if ($(this).val() === 'human') {
-            $('#topic-selection').show();
-            $('#general-knowledge-toggle').hide();
-            loadTopicsList();
-        } else {
-            $('#topic-selection').hide();
-            $('#general-knowledge-toggle').show();
-        }
-    });
+    $('#general-knowledge-toggle').hide(); // hide if still in HTML by mistake
+    loadTopicsList(); // immediately show topic list
 });
+

@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory
-from pinecone_utils import vector_store_manager
-from rag_kernel import run_query, clear_sk_memory, get_sk_chat_history
-from rag_chain import run_langchain_query, get_langchain_chat_history, clear_langchain_chat_memory
+#from pinecone_utils import vector_store_manager
+from qdrant_utils import vector_store_manager
+#from rag_kernel import run_query, clear_sk_memory, get_sk_chat_history
+#from rag_chain import run_langchain_query, get_langchain_chat_history, clear_langchain_chat_memory
 from rag_slm import run_slm_query, get_chat_history, clear_chat_memory
 import os
 import shutil
