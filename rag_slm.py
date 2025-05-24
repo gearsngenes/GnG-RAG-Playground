@@ -14,8 +14,6 @@ TOP_K = 5
 llm = Llama.from_pretrained(
     repo_id="unsloth/phi-4-GGUF",
     filename="phi-4-Q4_K_M.gguf",
-    # repo_id="unsloth/Phi-4-mini-reasoning-GGUF",
-    # filename="Phi-4-mini-reasoning-Q4_K_M.gguf",
     n_ctx=N_CTX
 )
 
