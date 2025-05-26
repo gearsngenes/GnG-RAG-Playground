@@ -6,6 +6,10 @@ function sendQuery() {
     }
 
     let selectedTopics = $('input[name="topics"]:checked').map((_, el) => el.value).get();
+    if (selectedTopics.includes("general")) {
+        selectedTopics = ["general"];
+    }
+
     if (selectedTopics.length === 0) {
         alert("Please select at least one topic.");
         return;
@@ -21,7 +25,7 @@ function sendQuery() {
         data: JSON.stringify({
             query: query,
             topics: selectedTopics,
-            use_general_knowledge: false  // now fixed to false since fallback is disabled
+            use_general_knowledge: false
         }),
         success: function(response) {
             let formattedResponse = marked.parse(response.response);
@@ -33,6 +37,7 @@ function sendQuery() {
         }
     });
 }
+
 $('#query-input').keypress(function(e) {
     if (e.which === 13 && !e.shiftKey) {
         e.preventDefault();
@@ -77,6 +82,7 @@ function loadChatHistory() {
 function loadTopicsList() {
     $.get('/list_indexes', function(data) {
         const topicsDiv = $('#topics-list').empty();
+        topicsDiv.append(`<label><input type="checkbox" name="topics" value="general"> General (Use general knowledge only)</label><br>`);
         data.filter(index => index !== 'table_of_contents').forEach(topic => {
             topicsDiv.append(`<label><input type="checkbox" name="topics" value="${topic}"> ${topic}</label><br>`);
         });
@@ -85,7 +91,10 @@ function loadTopicsList() {
 
 $(document).ready(function () {
     loadChatHistory();
-    $('#general-knowledge-toggle').hide(); // hide if still in HTML by mistake
-    loadTopicsList(); // immediately show topic list
+    $('#general-knowledge-toggle').hide();
+    loadTopicsList();
 });
 
+function scrollToBottom() {
+    $('#chat-box').scrollTop($('#chat-box')[0].scrollHeight);
+}

@@ -346,13 +346,13 @@ def query():
     data = request.json
     query_text = data.get("query")
     topics = list(data.get("topics", []))
-    use_general_knowledge = data.get("use_general_knowledge", True)
 
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
 
-    result = run_slm_query(query_text, topics, use_general_knowledge)
-    print(result['response'])
+    #result = run_query(query_text, topics)#
+    result = run_slm_query(query_text, topics)
+    #print(result['response'])
     return jsonify(result)
 
 @app.route(f'/{UPLOAD_FOLDER}/<path:filename>')
