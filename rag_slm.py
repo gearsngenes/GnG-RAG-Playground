@@ -87,17 +87,6 @@ def retrieve_chunks(topics, query):
         result += "\n\n<IMAGE DESCRIPTIONS>\n" + "\n\n".join(image_paths)
     return result
 
-def extract_think_response_sections(text):
-    """
-    Splits model output into <think> and <response> sections.
-    Returns a tuple: (think, response).
-    """
-    think_match = re.search(r"<think>\s*(.*?)\s*</think>", text, re.DOTALL | re.IGNORECASE)
-    response_match = re.search(r"<response>\s*(.*?)\s*</response>", text, re.DOTALL | re.IGNORECASE)
-    think = think_match.group(1).strip() if think_match else ""
-    response = response_match.group(1).strip() if response_match else text.strip()
-    return think, response
-
 def run_slm_query(query, topics):
     """
     Executes the main query pipeline: retrieves context and generates a Markdown-formatted response.
@@ -122,7 +111,7 @@ def run_slm_query(query, topics):
         )
         response = result["choices"][0]["message"]["content"].strip()
         _message_history.append({"role": "assistant", "content": response})
-        return {"think": "", "response": response}
+        return {"response": response}
 
     # === Otherwise, generate full RAG response ===
     from prompts import full_prompt_phi4
@@ -134,11 +123,9 @@ def run_slm_query(query, topics):
         max_tokens=MAX_TOKENS
     )
 
-    full_output = result["choices"][0]["message"]["content"].strip()
-    think, response = extract_think_response_sections(full_output)
-
+    response = result["choices"][0]["message"]["content"].strip()
     _message_history.append({"role": "assistant", "content": response})
-    return {"think": think, "response": response}
+    return {"response": response}
 
 # === CLI Debug Driver ===
 if __name__ == "__main__":

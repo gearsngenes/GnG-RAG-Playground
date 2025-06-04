@@ -350,7 +350,6 @@ def query():
     if not query_text:
         return jsonify({"error": "Query text is required."}), 400
 
-    #result = run_query(query_text, topics)#
     result = run_slm_query(query_text, topics)
     #print(result['response'])
     return jsonify(result)

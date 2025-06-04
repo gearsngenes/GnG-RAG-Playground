@@ -29,6 +29,7 @@ Users can upload documents (PDF, DOCX, PPTX, TXT) or images (JPG, PNG), organize
 ## 🗃 File Structure
 
 ```
+
 ├── app.py                  # Flask server & API endpoints
 ├── rag_slm.py              # SLM-based retrieval & markdown-based response logic
 ├── qdrant_utils.py         # Qdrant vector DB manager (embedding, querying, indexing)
@@ -45,7 +46,8 @@ Users can upload documents (PDF, DOCX, PPTX, TXT) or images (JPG, PNG), organize
 │       ├── index.js
 │       └── manage_topics.js
 └── .env                    # Your environment config (see below)
-```
+
+````
 
 ---
 
@@ -55,23 +57,35 @@ Users can upload documents (PDF, DOCX, PPTX, TXT) or images (JPG, PNG), organize
 
 ```bash
 pip install -r requirements.txt
-```
+````
 
 Or manually ensure these are installed:
 
-- flask
-- qdrant-client
-- sentence-transformers
-- llama-cpp-python
-- python-pptx, python-docx, PyPDF2
+* flask
+* qdrant-client
+* sentence-transformers
+* llama-cpp-python
+* python-pptx, python-docx, PyPDF2
 
 ---
 
 ### 2. Setup Qdrant (Local Vector DB)
 
+This project uses a **local Qdrant instance** for storing and querying vector embeddings.
+
+You can launch Qdrant via Docker:
+
 ```bash
-docker run -p 6333:6333 -v qdrant_data:/qdrant/storage qdrant/qdrant
+docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
 ```
+This command:
+
+ * Maps Qdrant's HTTP API to your local port `6333`
+ * Uses the REST port `6334`
+ * Persists vector data in the volume `qdrant_data`
+ * Uses the official image from Docker Hub
+
+Ensure Qdrant is running before launching the Flask app.
 
 ---
 
@@ -79,10 +93,11 @@ docker run -p 6333:6333 -v qdrant_data:/qdrant/storage qdrant/qdrant
 
 ```env
 UPLOAD_ROOT=uploads
-OPENAI_API_KEY = 'your-api-key' # OPTIONAL, if you are working with images in PDF's
+OPENAI_API_KEY=your-api-key  # Used ONLY for GPT-4 alt-text generation
+PINECONE_API_KEY=your-api-key # OPTIONAL, only if you choose not to use qdrant
 ```
 
-> ✅ No OpenAI or Pinecone API keys needed with the EXCEPTION of generating alt-text for images inside PDF's — this is a fully local deployment.
+> ✅ OpenAI is only used to generate image descriptions for embedded figures in PDF files where no alt-text can be accessed. The rest of the pipeline is fully local.
 
 ---
 
@@ -92,20 +107,20 @@ OPENAI_API_KEY = 'your-api-key' # OPTIONAL, if you are working with images in PD
 python app.py
 ```
 
-Access the app at: [http://localhost:5000](http://localhost:5000)
+Visit the app at: [http://localhost:5000](http://localhost:5000)
 
 ---
 
 ## 🔍 Features
 
-- ✅ Topic creation and metadata descriptions
-- ✅ File uploads with automatic subdirectory naming
-- ✅ Auto-extraction of embedded images from PDFs, DOCX, PPTX
-- ✅ Alt-text generation for embedded images or user-input descriptions
-- ✅ Embedding via `sentence-transformers` model
-- ✅ Fast retrieval using Qdrant
-- ✅ Query interface using `phi-4` via llama-cpp
-- ✅ Structured markdown output with citation links & rendered images
+* ✅ Topic creation and metadata descriptions
+* ✅ File uploads with automatic subdirectory naming
+* ✅ Auto-extraction of embedded images from PDFs, DOCX, PPTX
+* ✅ Alt-text generation for embedded images or user-input descriptions
+* ✅ Embedding via `sentence-transformers` model
+* ✅ Fast retrieval using Qdrant
+* ✅ Query interface using `phi-4` via llama-cpp
+* ✅ Structured markdown output with citation links & rendered images
 
 ---
 
@@ -114,6 +129,8 @@ Access the app at: [http://localhost:5000](http://localhost:5000)
 By default, the app loads:
 
 ```python
+from llama_cpp import Llama
+
 llm = Llama.from_pretrained(
     repo_id="unsloth/phi-4-GGUF",
     filename="phi-4-Q4_K_M.gguf",
@@ -121,18 +138,18 @@ llm = Llama.from_pretrained(
 )
 ```
 
-To use another GGUF-compatible model, replace the `repo_id` and `filename` in `rag_slm.py`.
+To use another GGUF-compatible model, just change the `repo_id` and `filename` in `rag_slm.py`.
 
 ---
 
-## 🖼 Image Citation Format
+## Image Citation Format
 
-Image files must include alt-text in one of two ways:
+Image files must include alt-text in one of three ways:
+* Images that come with alt-text in the documents themselves (DOCX/PPTX)
+* Auto-generated via GPT-4-turbo (PDF-upload pipeline)
+* Manually entered for individual JPG/PNG uploads
 
-- Auto-generated via GPT-4-turbo for embedded images (if available)
-- Manually entered for JPG/PNG uploads
-
-These are then embedded alongside other text content and rendered with:
+They are embedded and rendered in markdown as:
 
 ```markdown
 ![Image description](uploads/topic_dir/your_image.jpg)
@@ -142,7 +159,7 @@ These are then embedded alongside other text content and rendered with:
 
 ## 🐳 Docker Instructions (Optional)
 
-To deploy via Docker:
+To deploy the app via Docker:
 
 ```bash
 docker build -t gnrag .
@@ -155,23 +172,13 @@ Then access the app at: `http://<your.local.ip>:5000`
 
 ## 🧪 Testing CLI (Optional)
 
-To test queries in terminal with the local model:
+To test queries in terminal using the local model:
 
 ```bash
 python rag_slm.py
 ```
-
----
-
-## 🧹 Future Ideas
-
-- [ ] Multi-model support toggle (e.g. switch between phi-4, OpenChat, Mistral)
-- [ ] RAG agent orchestration using LangGraph/AutoGen
-- [ ] Enhanced PDF parsing with table/image recognition
-- [ ] Authentication and multi-user isolation
-
 ---
 
 ## 📬 Feedback & Issues
 
-Pull requests, suggestions, and bug reports are welcome! This project is designed for privacy-first local deployments, particularly for educators and researchers.
+Pull requests, suggestions, and bug reports welcome! This project is designed for privacy-first, offline deployments ideal for researchers, educators, and developers.
