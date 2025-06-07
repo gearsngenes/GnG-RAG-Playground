@@ -4,7 +4,7 @@ from urllib.parse import quote
 from llama_cpp import Llama
 from qdrant_utils import vector_store_manager
 from helpers import UPLOAD_FOLDER
-from prompts import full_prompt_phi4, full_prompt_phi4_mini_instruct, general_knowledge_prompt
+from prompts import full_prompt_phi4, general_knowledge_prompt
 
 # === Model Setup ===
 N_CTX = 8000
@@ -97,7 +97,7 @@ def run_slm_query(query, topics):
     # Retrieve context if specific topics were selected
     context = "" if "general" in topics else retrieve_chunks(topics, query)
     # Construct prompt based on whether specific topics were selected
-    full_prompt = general_knowledge_prompt(history, query) if "general" in topics else full_prompt_phi4_mini_instruct(context, history, query)
+    full_prompt = general_knowledge_prompt(history, query) if "general" in topics else full_prompt_phi4(context, history, query)
     # Generate the result
     result = llm.create_chat_completion(
         messages=[{"role": "user", "content": full_prompt}],
