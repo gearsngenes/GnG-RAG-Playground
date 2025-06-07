@@ -1,39 +1,36 @@
-from rag_slm import MAX_TOKENS
-
 def full_prompt_phi4(context, history, query):
         return (
-                f"You are a Markdown-only assistant. Use ONLY the information in the CONTEXT section to answer the user's question.\n"
-                f"Your total response must fit within {MAX_TOKENS} tokens and follow the formatting rules exactly.\n\n"
-
-                "---\n\n"
-
-                "### RESPONSE RULES\n"
-                "- Do NOT use outside knowledge.\n"
-                "- Your entire output should be in **valid Markdown**. DO NOT wrap the response in any extra tags or quotation marks like ```markdown... ```. Only provide the response itself.\n"
-                "- Cite sources inline using the following rules:\n"
+                f"Respond to the user's latest USER QUERY using and citing ONLY "
+                f"the information in the CONTEXT section as reference. Your "
+                f"response MUST FOLLOW ALL of the below rules:\n\n"
+                
+                "- Your total response length must be **500 words or less**.\n"
+                "- Cite ONLY the sources you ACTUALLY USE from CONTEXT using the markdown links "
+                "provided for each source. The format for inline citation are shown here:\n"
                 "  - For documents: [filename](url)\n"
                 "  - For images: use ![image description](url) on its own line.\n"
-                "- Each source may be used only once.\n"
-                "- Do not wrap links or images in quotes, backticks, or HTML.\n"
-                "- If no relevant content is found, respond with:\n"
-                "`No relevant information was found in the provided context.`\n\n"
-
+                "- Do not cite any source from CONTEXT more than once."
                 "---\n\n"
-
-                "### CONTEXT (Only information you are allowed to use)\n"
+                
+                "###CONTEXT\n"
                 f"{context}\n\n"
-
+                
                 "---\n\n"
-
-                "### CHAT HISTORY\n"
-                f"{history}\n\n"
-
-                "---\n\n"
-
-                "### USER QUERY\n"
-                f"{query}"
+                
+                "###USER QUERY\n"
+                f"{history}\n"
+                f"LATEST QUERY: {query}"
         )
 
+def general_knowledge_prompt(history, query):
+        return (
+                "Please respond to the user's latest query/statement to the best of your ability. "
+                "Below is the prior conversation and the latest user statement you must answer:\n\n"
+                "---\nCHAT HISTORY\n"
+                f"{history}\n\n"
+                "---\nUSER QUERY\n"
+                f"{query}"
+        )
 
 def full_prompt_4o(context, history, query):
         return (
@@ -54,5 +51,6 @@ def full_prompt_4o(context, history, query):
                 "Conversation History:\n"
                 f"{history}\n\n"
                 "---\n"
-                "Respond to the latest user query/statement.\n"
+                "Respond to the latest user query/statement below:\n"
+                f"{query}"
         )

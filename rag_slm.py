@@ -4,11 +4,12 @@ from urllib.parse import quote
 from llama_cpp import Llama
 from qdrant_utils import vector_store_manager
 from helpers import UPLOAD_FOLDER
+from prompts import full_prompt_phi4, full_prompt_phi4_mini_instruct, general_knowledge_prompt
 
 # === Model Setup ===
-N_CTX = 3000
-MAX_TOKENS = 500
-TOP_K = 5
+N_CTX = 8000
+MAX_TOKENS = 1000
+TOP_K = 3
 
 llm = Llama.from_pretrained(
     repo_id="unsloth/phi-4-GGUF",
@@ -70,14 +71,14 @@ def retrieve_chunks(topics, query):
             filter={"type": {"$eq": "image"}}
         )
 
-        for metadata in image_results:
+        for i,metadata in enumerate(image_results):
             content = metadata.get("content", "").replace("\n", "")
             file_path = metadata.get("file_path", "").replace("\\", "/")
             filename = os.path.basename(file_path)
             rel_path = file_path[len(f"{UPLOAD_FOLDER}/"):] if file_path.startswith(f"{UPLOAD_FOLDER}/") else file_path
             url = f"/{UPLOAD_FOLDER}/{quote(rel_path)}"
             markdown_url = f"![{filename}]({url})"
-            image_paths.append(markdown_url + f"\nDescription: {content}")
+            image_paths.append(f"Image {i}: {filename}\nURL:{markdown_url}\nDescription: {content}")
 
     if not context_texts and not image_paths:
         return "general_knowledge_only"
@@ -85,45 +86,27 @@ def retrieve_chunks(topics, query):
     result = "<TEXT CHUNKS>\n" + "\n\n".join(context_texts)
     if image_paths:
         result += "\n\n<IMAGE DESCRIPTIONS>\n" + "\n\n".join(image_paths)
+    #print("RETRIEVED RESULTS:\n", result)
     return result
 
 def run_slm_query(query, topics):
-    """
-    Executes the main query pipeline: retrieves context and generates a Markdown-formatted response.
-    If topic is "general" or no data found, falls back to general knowledge answer.
-    """
+    # Format it into a string
+    history = format_history()
+    # Update history
     _message_history.append({"role": "user", "content": query})
-
-    # General override
-    if "general" in topics:
-        topics = ["general"]
-
-    context = retrieve_chunks(topics, query)
-    #print("QUERY CONTEXT: ", context)
-
-    # === Fallback to general knowledge ===
-    if context in ["no_information_found", "general_knowledge_only"]:
-        general_prompt = f"Answer the following using general knowledge:\n\n{format_history()}\n\nNew query:\n{query}"
-        result = llm.create_chat_completion(
-            messages=[{"role": "user", "content": general_prompt}],
-            temperature=0.3,
-            max_tokens=MAX_TOKENS
-        )
-        response = result["choices"][0]["message"]["content"].strip()
-        _message_history.append({"role": "assistant", "content": response})
-        return {"response": response}
-
-    # === Otherwise, generate full RAG response ===
-    from prompts import full_prompt_phi4
-    full_prompt = full_prompt_phi4(context, format_history(), query)
-
+    # Retrieve context if specific topics were selected
+    context = "" if "general" in topics else retrieve_chunks(topics, query)
+    # Construct prompt based on whether specific topics were selected
+    full_prompt = general_knowledge_prompt(history, query) if "general" in topics else full_prompt_phi4_mini_instruct(context, history, query)
+    # Generate the result
     result = llm.create_chat_completion(
         messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.1,
+        temperature=0.2,
         max_tokens=MAX_TOKENS
     )
-
+    # Parse final output
     response = result["choices"][0]["message"]["content"].strip()
+    # Add response to history and return response
     _message_history.append({"role": "assistant", "content": response})
     return {"response": response}
 
@@ -143,5 +126,4 @@ if __name__ == "__main__":
         topics = [t.strip() for t in topic_str.split(",") if t.strip()]
 
         result = run_slm_query(query, topics)
-        print("\n🤖 Assistant (thinking):\n", result["think"])
         print("\n🤖 Assistant (response):\n", result["response"])

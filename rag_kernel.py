@@ -95,7 +95,7 @@ class QueryPlugin:
             prompt = f"Answer using general knowledge:\n\n{query}"
         else:
             from prompts import full_prompt_4o
-            prompt = full_prompt_4o(context, format_history(), query)#f"""
+            prompt = full_prompt_4o(context, format_history(), query)
         return await kernel.invoke_prompt(
             function_name="generate_answer",
             plugin_name="QueryResponse",
