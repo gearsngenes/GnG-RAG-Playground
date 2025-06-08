@@ -1,22 +1,91 @@
 import os
-import re
 from urllib.parse import quote
 from llama_cpp import Llama
 from qdrant_utils import vector_store_manager
 from helpers import UPLOAD_FOLDER
-from prompts import full_prompt_phi4, general_knowledge_prompt
+from prompts import full_prompt_phi4, full_prompt_stablelm, general_knowledge_prompt
 
 # === Model Setup ===
-N_CTX = 8000
+model_configs = {
+    "phi4":
+        {
+            "repo_id":"unsloth/phi-4-GGUF",
+            "filename":"phi-4-Q4_K_M.gguf",
+            "n_ctx":8000,
+            "max_ctxt":128000,
+            "top_k": 5,
+            "prompt":full_prompt_phi4
+        },
+    "Mistral-7B-DPO":
+        {
+            "repo_id":"NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF",
+            "filename":"Nous-Hermes-2-Mistral-7B-DPO.Q4_K_M.gguf",
+            "n_ctx":8000,
+            "max_ctxt":32000,
+            "top_k": 5,
+            "prompt":full_prompt_phi4
+        },
+    "Stable LM 2":
+        {
+            "repo_id":"stabilityai/stablelm-2-zephyr-1_6b",
+            "filename":"stablelm-2-zephyr-1_6b-Q5_K_M.gguf",
+            "n_ctx":2500,
+            "max_ctxt":4096,
+            "top_k": 2,
+            "prompt":full_prompt_stablelm
+        }
+}
+MODEL_NAME = "Mistral-7B-DPO"
+MODEL_CONFIG = model_configs.get(MODEL_NAME)
+
+REPO_ID = MODEL_CONFIG.get("repo_id")
+MODEL_FILENAME = MODEL_CONFIG.get("filename")
+N_CTX = MODEL_CONFIG.get("n_ctx")
+TOP_K = MODEL_CONFIG.get("top_k")
+
+RAG_PROMPT_TEMPLATE = MODEL_CONFIG.get("prompt")
 MAX_TOKENS = 1000
-TOP_K = 3
+
+'''
+Phi-4
+Context Window: 128K
+Best performing large-context model that I've tried out, but it is 
+somewhat demanding with regards to cpu and the time it takes. For
+small projects, I'd recommend keeping it to around 16K token for 
+context for it to use, unless you have GPU or more RAM to run it
+---
+
+stabilityai/stablelm-2-zephyr-1_6b
+INCREDIBLY FAST, but has a limited 4K token window and isn't as accurate.
+Great for building simple chatbots and using its general knowledge, but it
+is not well suited for RAG models that require large context windows to
+answer questions about documents. Best to use for simple q&a tasks that
+don't require a lot of reasoning.
+It is relatively weak in terms of following prompt instructions, as it
+doesn't properly cite the sources that it uses when I asked, and it
+still occasionally uses its own general knowledge not specified in the context.
+
+Maximum Token Window: 4K, but better performing to use around 2K
+
+The prompt template method associated with it does NOT use conversation context
+---
+
+Nous-Hermes-2 Mistral-7B-DPO
+Context Window: 32K
+It is the second best performing model of the three listed here,
+comparatively similar in performance to Phi-4, albeit it loses
+slightly in accuracy per some of the questions I've tested it
+on with regards to my RAG content. Perfectly suitable for any
+standard chatbot, however, as it is able to generate responses
+almost twice as fast as Phi-4. More testing to be done to
+confirm its effectiveness.
+'''
 
 llm = Llama.from_pretrained(
-    repo_id="unsloth/phi-4-GGUF",
-    filename="phi-4-Q4_K_M.gguf",
+    repo_id=REPO_ID,
+    filename=MODEL_FILENAME,
     n_ctx=N_CTX
 )
-
 # === Chat History Management ===
 _message_history = []
 
@@ -97,7 +166,7 @@ def run_slm_query(query, topics):
     # Retrieve context if specific topics were selected
     context = "" if "general" in topics else retrieve_chunks(topics, query)
     # Construct prompt based on whether specific topics were selected
-    full_prompt = general_knowledge_prompt(history, query) if "general" in topics else full_prompt_phi4(context, history, query)
+    full_prompt = general_knowledge_prompt(history, query) if "general" in topics else RAG_PROMPT_TEMPLATE(context, history, query)
     # Generate the result
     result = llm.create_chat_completion(
         messages=[{"role": "user", "content": full_prompt}],

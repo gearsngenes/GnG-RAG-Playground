@@ -1,3 +1,20 @@
+def full_prompt_stablelm(context, history, query):
+        return (
+                "You are a helpful assistant. Use only the information in the CONTEXT below to answer the user's question.\n\n"
+                "Instructions:\n"
+                "- Keep your answer under 500 words.\n"
+                "- Use only the information from the CONTEXT section. Do not guess or use outside knowledge.\n"
+                "- If you use information from a document or image, you MUST cite it like this: [filename](url)\n\n"
+                "CONTEXT:\n"
+                f"{context}\n\n"
+                #Uncomment below if you want it to include context from earlier in the conversation
+                # "PREVIOUS MESSAGES:\n"
+                # f"{history}\n\n"
+                "USER QUESTION:\n"
+                f"{query}\n\n"
+                "Answer:"
+        )
+
 def full_prompt_phi4(context, history, query):
         return (
                 f"Respond to the user's latest USER QUERY using and citing ONLY "
@@ -8,7 +25,7 @@ def full_prompt_phi4(context, history, query):
                 "- Cite ONLY the sources you ACTUALLY USE from CONTEXT using the markdown links "
                 "provided for each source. The format for inline citation are shown here:\n"
                 "  - For documents: [filename](url)\n"
-                "  - For images: use ![image description](url) on its own line.\n"
+                "  - For images: use ![image_name](url) on its own line.\n"
                 "- Do not cite any source from CONTEXT more than once."
                 "---\n\n"
                 
