@@ -130,11 +130,19 @@ By default, the app loads:
 
 ```python
 from llama_cpp import Llama
+#... code imports and model configs defined above
+MODEL_NAME = "Mistral-7B-DPO"
+MODEL_CONFIG = model_configs.get(MODEL_NAME)
 
+REPO_ID = MODEL_CONFIG.get("repo_id")
+MODEL_FILENAME = MODEL_CONFIG.get("filename")
+N_CTX = MODEL_CONFIG.get("n_ctx")
+#...
+#Define the llm based on the config details
 llm = Llama.from_pretrained(
-    repo_id="unsloth/phi-4-GGUF",
-    filename="phi-4-Q4_K_M.gguf",
-    n_ctx=3000
+    repo_id=REPO_ID,
+    filename=MODEL_FILENAME,
+    n_ctx=N_CTX
 )
 ```
 
@@ -168,6 +176,7 @@ docker run -d -p 5000:5000 --name rag-local gnrag
 
 Then access the app at: `http://<your.local.ip>:5000`
 
+**Warning:** If you are using the qdrant vector database, then the container you run WILL NOT WORK on account of the issue that the qdrant image won't be hosted on your device. This is under development at the moment.
 ---
 
 ## 🧪 Testing CLI (Optional)
