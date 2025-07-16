@@ -31,6 +31,7 @@ function sendQuery() {
             let formattedResponse = marked.parse(response.response);
             $('#chat-box').append(`<div class='message bot'><div class='markdown-body'>${formattedResponse}</div></div>`);
             MathJax.typesetPromise().then(scrollToBottom);
+            loadChatHistory();
         },
         error: function(xhr) {
             alert("Error: " + (xhr.responseJSON?.error || "An error occurred."));

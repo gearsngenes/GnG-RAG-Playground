@@ -178,7 +178,8 @@ def run_langchain_query(query, topics=None, use_general_knowledge=True):
         assistant_msg = result.content if hasattr(result, "content") else result
 
     _message_history.append({"role": "assistant", "content": assistant_msg})
-    return assistant_msg
+    result = {"response": assistant_msg}
+    return result
 
 """
 Uncomment the below lines if you want to test the pipeline locally
